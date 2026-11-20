@@ -1,0 +1,1422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>KotuKole ⚡ Web Terminal & Laptop Control</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #06090e;
+            --bg-surface: #0c111a;
+            --bg-card: #121824;
+            --bg-card-hover: #172030;
+            --border: rgba(255, 255, 255, 0.08);
+            --border-focus: rgba(56, 189, 248, 0.5);
+            --accent-cyan: #38bdf8;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-purple: #a855f7;
+            --accent-orange: #f97316;
+            --accent-red: #ef4444;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --term-font: 'JetBrains Mono', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        /* Top Header */
+        header {
+            background: rgba(12, 17, 26, 0.85);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            gap: 12px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .brand-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, #0284c7, #2563eb);
+            border-radius: 9px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            box-shadow: 0 0 16px rgba(56, 189, 248, 0.35);
+        }
+
+        .brand-text h1 {
+            font-size: 1.05rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            background: linear-gradient(to right, #ffffff, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand-text p {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: var(--accent-green);
+            padding: 5px 12px;
+            border-radius: 9999px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            transition: all 0.3s;
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--accent-green);
+            border-radius: 50%;
+            box-shadow: 0 0 8px var(--accent-green);
+            animation: pulse 1.8s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.35; transform: scale(0.85); }
+        }
+
+        .btn-header {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+            text-decoration: none;
+        }
+
+        .btn-header:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+
+        /* Main Container */
+        .container {
+            max-width: 1320px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 16px 20px 24px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        /* Collapsible Agent Connection Card */
+        .agent-banner {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.08), rgba(37, 99, 235, 0.05));
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            border-radius: 12px;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+            transition: all 0.3s;
+        }
+
+        .agent-banner.connected {
+            background: rgba(16, 185, 129, 0.06);
+            border-color: rgba(16, 185, 129, 0.25);
+            padding: 8px 14px;
+        }
+
+        .banner-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.85rem;
+            color: #e2e8f0;
+        }
+
+        .banner-info strong {
+            color: var(--accent-cyan);
+        }
+
+        .banner-buttons {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .btn-banner {
+            padding: 5px 11px;
+            border-radius: 7px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.2s;
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn-banner-blue {
+            background: #0284c7;
+            color: #fff;
+        }
+
+        .btn-banner-blue:hover {
+            background: #0369a1;
+        }
+
+        .btn-banner-green {
+            background: #10b981;
+            color: #042f2e;
+        }
+
+        .btn-banner-green:hover {
+            background: #059669;
+        }
+
+        .btn-banner-ghost {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+        }
+
+        .btn-banner-ghost:hover {
+            color: #fff;
+            border-color: var(--text-muted);
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        @media (max-width: 900px) {
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (max-width: 480px) {
+            .stats-grid { grid-template-columns: 1fr; }
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .stat-card:hover {
+            border-color: rgba(255, 255, 255, 0.15);
+            transform: translateY(-1px);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2.5px;
+            background: var(--card-accent, var(--accent-cyan));
+        }
+
+        .stat-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: var(--text-muted);
+            font-size: 0.74rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .stat-val-row {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+        }
+
+        .stat-value {
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: #fff;
+            letter-spacing: -0.02em;
+        }
+
+        .stat-badge {
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-muted);
+        }
+
+        .stat-sub {
+            font-size: 0.74rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .mini-progress {
+            width: 100%;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 99px;
+            overflow: hidden;
+            margin-top: 3px;
+        }
+
+        .mini-progress-fill {
+            height: 100%;
+            background: var(--card-accent, var(--accent-cyan));
+            border-radius: 99px;
+            transition: width 0.4s ease;
+        }
+
+        /* Quick Actions Bar */
+        .actions-panel {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .actions-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .action-tag {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-right: 4px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .btn-chip {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: #cbd5e1;
+            padding: 5px 11px;
+            border-radius: 7px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.15s ease;
+            user-select: none;
+        }
+
+        .btn-chip:hover {
+            background: #1e293b;
+            border-color: var(--accent-cyan);
+            color: #fff;
+            transform: translateY(-1px);
+        }
+
+        .btn-chip:active {
+            transform: translateY(0);
+        }
+
+        .btn-chip-red {
+            border-color: rgba(239, 68, 68, 0.3);
+            color: #f87171;
+        }
+
+        .btn-chip-red:hover {
+            background: rgba(239, 68, 68, 0.15);
+            border-color: #ef4444;
+            color: #fff;
+        }
+
+        /* Terminal Container */
+        .terminal-box {
+            background: #080c14;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 460px;
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .terminal-box.fullscreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 100;
+            border-radius: 0;
+            min-height: 100vh;
+        }
+
+        /* Titlebar */
+        .terminal-header {
+            background: #0d131f;
+            border-bottom: 1px solid var(--border);
+            padding: 8px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            user-select: none;
+        }
+
+        .traffic-dots {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .traffic-dot {
+            width: 11px;
+            height: 11px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .dot-close { background: #ff5f56; }
+        .dot-minimize { background: #ffbd2e; }
+        .dot-expand { background: #27c93f; }
+        .traffic-dots:hover .traffic-dot { opacity: 0.8; }
+
+        .terminal-meta {
+            font-family: var(--term-font);
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .terminal-meta span {
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .terminal-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-term-tool {
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-muted);
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.74rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.2s;
+        }
+
+        .btn-term-tool:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: var(--border);
+            color: #fff;
+        }
+
+        /* Terminal Body Output */
+        .terminal-body {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+            font-family: var(--term-font);
+            font-size: 0.88rem;
+            line-height: 1.6;
+            color: #cbd5e1;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .terminal-body::-webkit-scrollbar {
+            width: 8px;
+        }
+        .terminal-body::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.12);
+            border-radius: 4px;
+        }
+        .terminal-body::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        .term-entry {
+            margin-bottom: 12px;
+        }
+
+        .term-cmd-line {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            color: var(--accent-cyan);
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .term-cmd-prompt {
+            color: var(--accent-green);
+            user-select: none;
+        }
+
+        .term-cmd-time {
+            font-size: 0.7rem;
+            color: #64748b;
+            margin-left: auto;
+            user-select: none;
+        }
+
+        .term-out-text {
+            color: #e2e8f0;
+            padding-left: 14px;
+            border-left: 2px solid rgba(56, 189, 248, 0.2);
+        }
+
+        .term-err-text {
+            color: #f87171;
+            padding-left: 14px;
+            border-left: 2px solid rgba(239, 68, 68, 0.4);
+        }
+
+        /* Input Bar */
+        .terminal-footer {
+            background: #0d131f;
+            border-top: 1px solid var(--border);
+            padding: 10px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        /* Command Chips Row */
+        .quick-chips-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            overflow-x: auto;
+            padding-bottom: 2px;
+            scrollbar-width: none;
+        }
+        .quick-chips-row::-webkit-scrollbar { display: none; }
+
+        .chip-label {
+            font-size: 0.68rem;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .chip-pill {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border);
+            color: #94a3b8;
+            padding: 2px 8px;
+            border-radius: 5px;
+            font-family: var(--term-font);
+            font-size: 0.72rem;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.15s;
+        }
+
+        .chip-pill:hover {
+            background: rgba(56, 189, 248, 0.15);
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+
+        .input-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .input-prompt {
+            color: var(--accent-green);
+            font-family: var(--term-font);
+            font-weight: 700;
+            font-size: 0.95rem;
+            user-select: none;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .input-field-wrap {
+            flex: 1;
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .term-input {
+            width: 100%;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #fff;
+            font-family: var(--term-font);
+            font-size: 0.92rem;
+        }
+
+        .term-input::placeholder {
+            color: #475569;
+        }
+
+        .btn-submit {
+            background: linear-gradient(135deg, #0284c7, #2563eb);
+            color: #fff;
+            border: none;
+            padding: 8px 18px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 0.82rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+            box-shadow: 0 0 12px rgba(2, 132, 199, 0.3);
+            white-space: nowrap;
+        }
+
+        .btn-submit:hover:not(:disabled) {
+            background: linear-gradient(135deg, #0369a1, #1d4ed8);
+            box-shadow: 0 0 18px rgba(2, 132, 199, 0.5);
+            transform: translateY(-1px);
+        }
+
+        .btn-submit:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            filter: grayscale(0.4);
+        }
+
+        /* Spinner */
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Auth Modal */
+        .auth-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(3, 6, 12, 0.88);
+            backdrop-filter: blur(12px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            z-index: 1000;
+        }
+
+        .auth-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 32px 28px;
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 24px 48px rgba(0, 0, 0, 0.7);
+        }
+
+        .auth-icon {
+            width: 56px;
+            height: 56px;
+            background: rgba(56, 189, 248, 0.12);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            margin-bottom: 16px;
+        }
+
+        .auth-card h2 {
+            font-size: 1.25rem;
+            font-weight: 800;
+            margin-bottom: 6px;
+        }
+
+        .auth-card p {
+            color: var(--text-muted);
+            font-size: 0.84rem;
+            margin-bottom: 20px;
+            line-height: 1.45;
+        }
+
+        .auth-input {
+            width: 100%;
+            background: #090e17;
+            border: 1px solid var(--border);
+            padding: 12px 16px;
+            border-radius: 10px;
+            color: #fff;
+            font-size: 1.05rem;
+            margin-bottom: 14px;
+            outline: none;
+            text-align: center;
+            letter-spacing: 0.12em;
+            transition: border-color 0.2s;
+        }
+
+        .auth-input:focus {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+        }
+
+        .auth-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #0284c7, #2563eb);
+            color: #fff;
+            border: none;
+            padding: 12px;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 0.92rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .auth-btn:hover {
+            box-shadow: 0 0 18px rgba(37, 99, 235, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .auth-error {
+            color: var(--accent-red);
+            font-size: 0.8rem;
+            margin-top: 10px;
+            display: none;
+        }
+
+        /* Mobile Adjustments */
+        @media (max-width: 640px) {
+            header { padding: 8px 14px; }
+            .container { padding: 10px 12px 18px; gap: 10px; }
+            .terminal-box { min-height: 380px; }
+            .actions-panel { padding: 6px 10px; }
+            .btn-chip { font-size: 0.74rem; padding: 4px 9px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="brand">
+            <div class="brand-icon">⚡</div>
+            <div class="brand-text">
+                <h1>KotuKole Console</h1>
+                <p>Physical Laptop Remote Control</p>
+            </div>
+        </div>
+        <div class="header-actions">
+            <div class="status-pill" id="global-status-pill">
+                <div class="pulse-dot" id="global-pulse-dot"></div>
+                <span id="global-status-text">CONNECTING...</span>
+            </div>
+            <button class="btn-header" onclick="toggleAgentGuide()" title="Agent Setup Guide">
+                ⚙️ Setup
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="container">
+
+        <!-- Agent Guide / Status Banner -->
+        <div class="agent-banner" id="agent-banner">
+            <div class="banner-info" id="banner-info">
+                <span style="font-size: 1.1rem;">💻</span>
+                <div>
+                    <strong id="banner-title">Physical Laptop Agent Setup</strong>
+                    <div style="font-size: 0.78rem; color: #94a3b8;" id="banner-sub">
+                        Run the 12KB Agent or PowerShell command on your laptop to link directly.
+                    </div>
+                </div>
+            </div>
+            <div class="banner-buttons" id="banner-buttons">
+                <button class="btn-banner btn-banner-ghost" onclick="copyPsOneLiner()">
+                    📋 Copy PowerShell 1-Liner
+                </button>
+                <a href="KotuKole-Laptop.exe" download class="btn-banner btn-banner-blue">
+                    ⚡ Direct .EXE (12KB)
+                </a>
+                <a href="Start-Laptop-Agent.bat" download class="btn-banner btn-banner-green">
+                    🚀 1-Click .BAT
+                </a>
+                <a href="KotuKole-Console-Source.zip" download class="btn-banner" style="background: #8b5cf6; color: #fff;">
+                    📦 Source Code (.ZIP)
+                </a>
+            </div>
+        </div>
+
+        <!-- Hardware Stat Cards -->
+        <div class="stats-grid">
+            <!-- CPU Card -->
+            <div class="stat-card" style="--card-accent: var(--accent-cyan);">
+                <div class="stat-top">
+                    <span>Processor (CPU)</span>
+                    <span id="cpu-badge" class="stat-badge">-- Cores</span>
+                </div>
+                <div class="stat-val-row">
+                    <div class="stat-value" id="cpu-cores">--</div>
+                </div>
+                <div class="stat-sub" id="cpu-model">Detecting CPU...</div>
+            </div>
+
+            <!-- RAM Card -->
+            <div class="stat-card" style="--card-accent: var(--accent-green);">
+                <div class="stat-top">
+                    <span>Memory (RAM)</span>
+                    <span id="ram-badge" class="stat-badge">--%</span>
+                </div>
+                <div class="stat-val-row">
+                    <div class="stat-value" id="ram-used">-- GB</div>
+                </div>
+                <div class="stat-sub" id="ram-total">Total: -- GB</div>
+                <div class="mini-progress">
+                    <div class="mini-progress-fill" id="ram-bar" style="width: 0%;"></div>
+                </div>
+            </div>
+
+            <!-- Disk Card -->
+            <div class="stat-card" style="--card-accent: var(--accent-orange);">
+                <div class="stat-top">
+                    <span>Storage (Disk)</span>
+                    <span id="disk-badge" class="stat-badge">--%</span>
+                </div>
+                <div class="stat-val-row">
+                    <div class="stat-value" id="disk-free">-- Free</div>
+                </div>
+                <div class="stat-sub" id="disk-total">Total: -- GB</div>
+                <div class="mini-progress">
+                    <div class="mini-progress-fill" id="disk-bar" style="width: 0%;"></div>
+                </div>
+            </div>
+
+            <!-- System / OS Card -->
+            <div class="stat-card" style="--card-accent: var(--accent-purple);">
+                <div class="stat-top">
+                    <span>OS & Uptime</span>
+                    <span id="status-tag" class="stat-badge">ACTIVE</span>
+                </div>
+                <div class="stat-val-row">
+                    <div class="stat-value" id="uptime">--</div>
+                </div>
+                <div class="stat-sub" id="os-name">Detecting OS...</div>
+            </div>
+        </div>
+
+        <!-- Quick Action Bar -->
+        <div class="actions-panel">
+            <div class="actions-group">
+                <span class="action-tag">⚡ Quick Run:</span>
+                <button class="btn-chip" onclick="runQuickAction('specs')" title="Full hardware specifications">
+                    💻 Specs
+                </button>
+                <button class="btn-chip" onclick="runQuickAction('ram')" title="Detailed live RAM breakdown">
+                    📊 RAM Info
+                </button>
+                <button class="btn-chip" onclick="runQuickAction('disks')" title="All Disk Drives and Free Space">
+                    💾 Disks
+                </button>
+                <button class="btn-chip" onclick="runQuickAction('wifi_profiles')" title="17: View all saved Wi-Fi Profiles">
+                    📶 Wi-Fi List
+                </button>
+                <button class="btn-chip" onclick="runQuickAction('wifi_pass')" title="18: Extract All Saved Wi-Fi Passwords in table" style="border-color: rgba(245, 158, 11, 0.4); color: #fbbf24;">
+                    🔑 Wi-Fi Passwords
+                </button>
+                <button class="btn-chip" onclick="runQuickAction('wifi_signal')" title="19: Active Wi-Fi Signal Strength & Interface details">
+                    📡 Signal Strength
+                </button>
+                <button class="btn-chip" onclick="runQuickAction('public_ip')" title="20: Public Internet IP and ISP Details">
+                    🌍 Public IP
+                </button>
+                <button class="btn-chip" onclick="runQuickAction('apps')" title="Running Applications list">
+                    ⚡ Apps
+                </button>
+                <button class="btn-chip" onclick="runQuickAction('net')" title="IP & Network details">
+                    🌐 Network
+                </button>
+                <button class="btn-chip" onclick="runQuickAction('files')" title="List Directory Files">
+                    📁 Files
+                </button>
+                <button class="btn-chip" onclick="runQuickAction('lock')" title="Lock laptop screen">
+                    🔒 Lock Screen
+                </button>
+                <button class="btn-chip" onclick="speakDialog()" title="Text-to-Speech through laptop speaker">
+                    🗣️ Speak
+                </button>
+                <button class="btn-chip" onclick="runQuickAction('save_code')" title="Create a folder on your Desktop and save all project code files into it" style="border-color: rgba(139, 92, 246, 0.4); color: #c084fc;">
+                    📦 Save Code to Desktop
+                </button>
+            </div>
+            <div class="actions-group">
+                <button class="btn-chip btn-chip-red" onclick="clearTerminal()" title="Clear terminal screen">
+                    🧹 Clear
+                </button>
+            </div>
+        </div>
+
+        <!-- Interactive Terminal -->
+        <div class="terminal-box" id="terminal-box">
+            <!-- Terminal Header -->
+            <div class="terminal-header">
+                <div class="traffic-dots">
+                    <div class="traffic-dot dot-close" onclick="clearTerminal()" title="Clear"></div>
+                    <div class="traffic-dot dot-minimize" onclick="scrollTerminalTop()" title="Scroll Top"></div>
+                    <div class="traffic-dot dot-expand" onclick="toggleFullscreen()" title="Fullscreen"></div>
+                </div>
+                <div class="terminal-meta" id="term-meta">
+                    Session: <span id="term-user-host">Connecting...</span>
+                </div>
+                <div class="terminal-toolbar">
+                    <button class="btn-term-tool" onclick="copyTerminalOutput()" title="Copy all output">
+                        📋 Copy Output
+                    </button>
+                    <button class="btn-term-tool" onclick="toggleFullscreen()" title="Toggle Fullscreen">
+                        ⛶ Fullscreen
+                    </button>
+                </div>
+            </div>
+
+            <!-- Terminal Output Area -->
+            <div class="terminal-body" id="term-output" onclick="focusInput()">
+                <div style="color: #64748b;">[KotuKole Lap Terminal v2.0 Ready]</div>
+                <div style="color: #64748b;">Type any command or click the Quick Action chips above.</div>
+            </div>
+
+            <!-- Terminal Footer Input -->
+            <div class="terminal-footer">
+                <!-- Suggested command pills -->
+                <div class="quick-chips-row">
+                    <span class="chip-label">Suggestions:</span>
+                    <span class="chip-pill" onclick="insertCmd('dir')">dir</span>
+                    <span class="chip-pill" onclick="insertCmd('ipconfig')">ipconfig</span>
+                    <span class="chip-pill" onclick="insertCmd('tasklist')">tasklist</span>
+                    <span class="chip-pill" onclick="insertCmd('whoami')">whoami</span>
+                    <span class="chip-pill" onclick="insertCmd('echo Hello from KotuKole')">echo</span>
+                    <span class="chip-pill" onclick="insertCmd('start calc')">calc</span>
+                    <span class="chip-pill" onclick="insertCmd('start notepad')">notepad</span>
+                    <span class="chip-pill" onclick="insertCmd('systeminfo')">systeminfo</span>
+                </div>
+
+                <!-- Input Row -->
+                <div class="input-row">
+                    <div class="input-prompt" id="prompt-label">C:\&gt;</div>
+                    <div class="input-field-wrap">
+                        <input type="text" id="cmd-input" class="term-input" placeholder="Type Windows command (e.g. dir, ipconfig, tasklist)..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                    </div>
+                    <button class="btn-submit" id="btn-submit" onclick="submitCommand()">
+                        <span id="submit-text">Run</span>
+                        <span id="submit-spinner" class="spinner" style="display: none;"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Auth Modal -->
+    <div class="auth-overlay" id="auth-modal">
+        <div class="auth-card">
+            <div class="auth-icon">🔐</div>
+            <h2>KotuKole Terminal</h2>
+            <p>Access Password එක ඇතුළත් කර Console එක Unlock කරගන්න.</p>
+            <input type="password" id="auth-password" class="auth-input" placeholder="Password ඇතුළත් කරන්න" autofocus>
+            <button class="auth-btn" onclick="login()">Unlock Terminal</button>
+            <div class="auth-error" id="auth-error"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = (window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname + '/').replace(/\/+$/, '') + '/api';
+        let authToken = localStorage.getItem('kotukole_lap_token') || '';
+        let cmdHistory = [];
+        let historyIdx = -1;
+        let isLaptopOnline = false;
+        let isRunningCommand = false;
+
+        const outputEl = document.getElementById('term-output');
+        const cmdInput = document.getElementById('cmd-input');
+        const submitBtn = document.getElementById('btn-submit');
+        const submitText = document.getElementById('submit-text');
+        const submitSpinner = document.getElementById('submit-spinner');
+        const authModal = document.getElementById('auth-modal');
+        const authError = document.getElementById('auth-error');
+        const authPassword = document.getElementById('auth-password');
+        const terminalBox = document.getElementById('terminal-box');
+
+        // Check Auth
+        async function checkAuth() {
+            if (!authToken) {
+                showLogin();
+                return;
+            }
+            try {
+                const res = await fetch(`${API_BASE}/stats`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                if (res.status === 401) {
+                    showLogin();
+                } else {
+                    hideLogin();
+                    loadStats();
+                    setInterval(loadStats, 3000);
+                }
+            } catch (e) {
+                hideLogin();
+            }
+        }
+        checkAuth();
+
+        function showLogin() {
+            authModal.style.display = 'flex';
+            authPassword.focus();
+        }
+
+        function hideLogin() {
+            authModal.style.display = 'none';
+        }
+
+        async function login() {
+            const pwd = (authPassword.value || '').trim();
+            if (!pwd) return;
+            try {
+                const res = await fetch(`${API_BASE}/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: pwd })
+                });
+                const data = await res.json();
+                if (data.success && data.token) {
+                    authToken = data.token;
+                    localStorage.setItem('kotukole_lap_token', authToken);
+                    hideLogin();
+                    loadStats();
+                    setInterval(loadStats, 3000);
+                } else {
+                    authError.innerText = data.error || 'Password වැරදියි! නැවත උත්සාහ කරන්න.';
+                    authError.style.display = 'block';
+                }
+            } catch (err) {
+                authError.innerText = 'Connection error. Please retry.';
+                authError.style.display = 'block';
+            }
+        }
+
+        authPassword.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') login();
+        });
+
+        // Load Stats
+        async function loadStats() {
+            if (!authToken) return;
+            try {
+                const res = await fetch(`${API_BASE}/stats`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                if (!res.ok) return;
+                const stats = await res.json();
+
+                const statusPill = document.getElementById('global-status-pill');
+                const statusText = document.getElementById('global-status-text');
+                const pulseDot = document.getElementById('global-pulse-dot');
+                const agentBanner = document.getElementById('agent-banner');
+
+                if (stats.agent && stats.agent.online) {
+                    isLaptopOnline = true;
+                    statusPill.style.background = 'rgba(16, 185, 129, 0.15)';
+                    statusPill.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+                    statusPill.style.color = '#10b981';
+                    pulseDot.style.background = '#10b981';
+                    statusText.innerText = `🟢 LAPTOP: ${stats.agent.hostname} (ONLINE)`;
+
+                    document.getElementById('term-user-host').innerText = `${stats.agent.user}@${stats.agent.hostname} [Physical Laptop]`;
+                    document.getElementById('prompt-label').innerText = `${stats.agent.hostname}>`;
+                    cmdInput.placeholder = "Type Windows command (e.g. dir, ipconfig, whoami, tasklist)...";
+
+                    document.getElementById('cpu-cores').innerText = `${stats.agent.cores} Cores`;
+                    document.getElementById('cpu-badge').innerText = 'Physical PC';
+                    document.getElementById('cpu-model').innerText = stats.agent.cpuModel || 'Windows Processor';
+                    document.getElementById('os-name').innerText = stats.agent.os;
+                    document.getElementById('status-tag').innerText = 'ONLINE';
+                    document.getElementById('status-tag').style.color = '#10b981';
+
+                    if (stats.agent.ramTotal && stats.agent.ramTotal !== 'Unknown') {
+                        document.getElementById('ram-used').innerText = stats.agent.ramUsed;
+                        document.getElementById('ram-total').innerText = `Total: ${stats.agent.ramTotal}`;
+                        document.getElementById('ram-badge').innerText = `${stats.agent.ramPercent}%`;
+                        document.getElementById('ram-bar').style.width = `${stats.agent.ramPercent}%`;
+                    }
+
+                    if (stats.agent.diskTotal && stats.agent.diskTotal !== 'Unknown') {
+                        document.getElementById('disk-free').innerText = stats.agent.diskFree;
+                        document.getElementById('disk-total').innerText = `Total: ${stats.agent.diskTotal}`;
+                        document.getElementById('disk-badge').innerText = stats.agent.diskPercent;
+                        document.getElementById('disk-bar').style.width = stats.agent.diskPercent;
+                    }
+
+                    // Compact connected banner state
+                    agentBanner.classList.add('connected');
+                    document.getElementById('banner-title').innerHTML = `Connected to <span style="color:#10b981">${stats.agent.hostname}</span> (${stats.agent.user})`;
+                    document.getElementById('banner-sub').innerText = `Commands route directly to your physical laptop • Live and healthy.`;
+                } else {
+                    isLaptopOnline = false;
+                    statusPill.style.background = 'rgba(234, 179, 8, 0.15)';
+                    statusPill.style.borderColor = 'rgba(234, 179, 8, 0.4)';
+                    statusPill.style.color = '#eab308';
+                    pulseDot.style.background = '#eab308';
+                    statusText.innerText = `🟡 CLOUD VPS (Laptop Agent Offline)`;
+
+                    document.getElementById('term-user-host').innerText = `${stats.user}@${stats.hostname} [Cloud VPS]`;
+                    document.getElementById('prompt-label').innerText = `vps:~$`;
+                    cmdInput.placeholder = "Laptop offline. Shell commands will run on cloud VPS...";
+
+                    document.getElementById('cpu-cores').innerText = `${stats.cpu.cores} Cores`;
+                    document.getElementById('cpu-badge').innerText = 'VPS Host';
+                    document.getElementById('cpu-model').innerText = stats.cpu.model;
+                    document.getElementById('os-name').innerText = stats.platform;
+                    document.getElementById('status-tag').innerText = 'VPS FALLBACK';
+                    document.getElementById('status-tag').style.color = '#eab308';
+
+                    document.getElementById('ram-used').innerText = stats.memory.used;
+                    document.getElementById('ram-total').innerText = `Total: ${stats.memory.total}`;
+                    document.getElementById('ram-badge').innerText = `${stats.memory.percent}%`;
+                    document.getElementById('ram-bar').style.width = `${stats.memory.percent}%`;
+
+                    if (stats.disk && stats.disk.pct) {
+                        document.getElementById('disk-free').innerText = `${stats.disk.free} Free`;
+                        document.getElementById('disk-total').innerText = `Total: ${stats.disk.total}`;
+                        document.getElementById('disk-badge').innerText = stats.disk.pct;
+                        document.getElementById('disk-bar').style.width = stats.disk.pct;
+                    }
+
+                    agentBanner.classList.remove('connected');
+                    document.getElementById('banner-title').innerText = `Physical Laptop Agent Setup`;
+                    document.getElementById('banner-sub').innerText = `Run the 12KB Agent or PowerShell command on your laptop to link directly.`;
+                }
+
+                document.getElementById('uptime').innerText = stats.uptime || 'Active';
+            } catch (e) {}
+        }
+
+        // Quick Actions
+        function runQuickAction(action) {
+            let cmd = '';
+            if (isLaptopOnline) {
+                if (action === 'specs') {
+                    cmd = 'systeminfo';
+                } else if (action === 'ram') {
+                    cmd = 'powershell -NoProfile -Command "$m=Get-CimInstance Win32_OperatingSystem; [PSCustomObject]@{ \'Total RAM\'=[string][math]::Round($m.TotalVisibleMemorySize/1MB,1)+\' GB\'; \'Used RAM\'=[string][math]::Round(($m.TotalVisibleMemorySize-$m.FreePhysicalMemory)/1MB,1)+\' GB\'; \'Free RAM\'=[string][math]::Round($m.FreePhysicalMemory/1MB,1)+\' GB\'; \'Usage\'=[string][math]::Round((($m.TotalVisibleMemorySize-$m.FreePhysicalMemory)/$m.TotalVisibleMemorySize)*100,1)+\' %\' } | Format-List"';
+                } else if (action === 'disks') {
+                    cmd = 'powershell -NoProfile -Command "Get-PSDrive -PSProvider FileSystem | Select-Object Name, @{N=\'Used(GB)\';E={[math]::Round($_.Used/1GB,1)}}, @{N=\'Free(GB)\';E={[math]::Round($_.Free/1GB,1)}}, @{N=\'Total(GB)\';E={[math]::Round(($_.Used+$_.Free)/1GB,1)}}, Root | Format-Table -AutoSize"';
+                } else if (action === 'wifi_profiles') {
+                    cmd = 'netsh wlan show profiles';
+                } else if (action === 'wifi_pass') {
+                    const wifiScript = [
+                    "$p = (netsh wlan show profiles) | Select-String \"All User Profile\\s*:\\s*(.+)$\" | ForEach-Object { $_.Matches.Groups[1].Value.Trim() };",
+                    "foreach ($w in $p) {",
+                    "    $k = ((netsh wlan show profile name=$w key=clear) | Select-String \"Key Content\\s*:\\s*(.+)$\").Matches.Groups[1].Value.Trim();",
+                    "    [PSCustomObject]@{ \"Wi-Fi Name\" = $w; \"Password\" = if ($k) { $k } else { \"(Open)\" } }",
+                    "} | Format-Table -AutoSize"
+                ].join(" ");
+                cmd = "powershell -NoProfile -Command \"" + wifiScript.replace(/"/g, "\\\"") + "\"";
+                } else if (action === 'wifi_signal') {
+                    cmd = 'netsh wlan show interfaces';
+                } else if (action === 'public_ip') {
+                    cmd = 'powershell -NoProfile -Command "Invoke-RestMethod ipinfo.io/json | Select-Object ip, city, region, country, org | Format-List"';
+                } else if (action === 'apps') {
+                    cmd = 'tasklist';
+                } else if (action === 'net') {
+                    cmd = 'ipconfig';
+                } else if (action === 'files') {
+                    cmd = 'dir';
+                } else if (action === 'lock') {
+                    cmd = 'rundll32.exe user32.dll,LockWorkStation';
+                } else if (action === 'save_code') {
+                    cmd = 'powershell -NoProfile -Command "$d=[Environment]::GetFolderPath(\'Desktop\')+\'\\KotuKole-Console-Source\'; if(!(Test-Path $d)){mkdir $d|Out-Null}; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri \'https://kotukole.com/lap/KotuKole-Console-Source.zip\' -OutFile \"$d\\source.zip\"; Expand-Archive \"$d\\source.zip\" $d -Force; del \"$d\\source.zip\"; explorer $d; Get-ChildItem $d | Format-Table Name, Length"';
+                }
+            } else {
+                if (action === 'specs') cmd = 'lscpu | grep -E "Model name|Architecture|CPU(s)"';
+                else if (action === 'ram') cmd = 'free -h';
+                else if (action === 'disks') cmd = 'df -h';
+                else if (action === 'wifi_profiles') cmd = 'nmcli connection show || ip a';
+                else if (action === 'wifi_pass') cmd = 'echo "Wi-Fi passwords only available on physical laptop."';
+                else if (action === 'wifi_signal') cmd = 'iwconfig 2>/dev/null || ip a';
+                else if (action === 'public_ip') cmd = 'curl -s https://ipinfo.io/json || curl -s ifconfig.me';
+                else if (action === 'apps') cmd = 'ps aux --sort=-%mem | head -n 8';
+                else if (action === 'net') cmd = 'ip a | grep inet';
+                else if (action === 'files') cmd = 'ls -la';
+                else if (action === 'lock') cmd = 'echo "Screen lock is only applicable to Windows physical laptop."';
+                else if (action === 'save_code') cmd = 'echo "Please run on Windows physical laptop to save code to your Desktop."';
+            }
+
+            if (cmd) {
+                cmdInput.value = cmd;
+                submitCommand();
+            }
+        }
+
+        // Speak Dialog
+        function speakDialog() {
+            const text = prompt('ඔබේ Laptop එකේ Speaker එකෙන් ශබ්ද නඟා කියවිය යුතු වාක්‍යය ඇතුළත් කරන්න:', 'Hello boss! KotuKole terminal is connected.');
+            if (text) {
+                const safeText = text.replace(/'/g, "''");
+                const speakCmd = `powershell -NoProfile -Command "Add-Type -AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak('${safeText}')"`;
+                cmdInput.value = speakCmd;
+                submitCommand();
+            }
+        }
+
+        // Insert suggested chip
+        function insertCmd(c) {
+            cmdInput.value = c;
+            cmdInput.focus();
+        }
+
+        // Append to Output
+        function appendOutput(text, type = 'out') {
+            const entry = document.createElement('div');
+            entry.className = type === 'cmd' ? 'term-cmd-line' : type === 'err' ? 'term-err-text' : 'term-out-text';
+            
+            if (type === 'cmd') {
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                entry.innerHTML = `<span class="term-cmd-prompt">${isLaptopOnline ? 'C:&gt;' : '$'}</span> <span>${escapeHtml(text)}</span> <span class="term-cmd-time">${timeStr}</span>`;
+            } else {
+                entry.innerText = text;
+            }
+
+            outputEl.appendChild(entry);
+            outputEl.scrollTop = outputEl.scrollHeight;
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+
+        function clearTerminal() {
+            outputEl.innerHTML = '';
+            appendOutput('[Screen cleared by user]');
+        }
+
+        function scrollTerminalTop() {
+            outputEl.scrollTop = 0;
+        }
+
+        function focusInput() {
+            cmdInput.focus();
+        }
+
+        function copyTerminalOutput() {
+            const text = outputEl.innerText;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Terminal Output සාර්ථකව Copy විය! ✓');
+            }).catch(() => {
+                prompt('Copy this text manually:', text);
+            });
+        }
+
+        function toggleFullscreen() {
+            terminalBox.classList.toggle('fullscreen');
+        }
+
+        function copyPsOneLiner() {
+            const cmd = 'irm https://kotukole.com/lap/agent.ps1 | iex';
+            navigator.clipboard.writeText(cmd).then(() => {
+                alert('PowerShell 1-Liner copied to clipboard! ✓\n\nNow open PowerShell on your laptop and paste it (Ctrl+V) and press Enter.');
+            });
+        }
+
+        function toggleAgentGuide() {
+            const banner = document.getElementById('agent-banner');
+            banner.classList.toggle('connected');
+        }
+
+        // Submit Command
+        function submitCommand() {
+            if (isRunningCommand) return;
+            const cmd = cmdInput.value.trim();
+            if (!cmd) return;
+
+            if (cmd === 'clear' || cmd === 'cls') {
+                clearTerminal();
+                cmdInput.value = '';
+                return;
+            }
+
+            // UI state: Running
+            isRunningCommand = true;
+            submitBtn.disabled = true;
+            submitText.innerText = 'Running...';
+            submitSpinner.style.display = 'inline-block';
+
+            appendOutput(cmd, 'cmd');
+            cmdHistory.push(cmd);
+            historyIdx = cmdHistory.length;
+            cmdInput.value = '';
+
+            const evtSource = new EventSource(`${API_BASE}/exec?cmd=${encodeURIComponent(cmd)}&token=${encodeURIComponent(authToken)}`);
+
+            evtSource.addEventListener('stdout', (e) => {
+                const text = JSON.parse(e.data);
+                appendOutput(text, 'out');
+            });
+
+            evtSource.addEventListener('stderr', (e) => {
+                const text = JSON.parse(e.data);
+                appendOutput(text, 'err');
+            });
+
+            const finishExecution = () => {
+                evtSource.close();
+                isRunningCommand = false;
+                submitBtn.disabled = false;
+                submitText.innerText = 'Run';
+                submitSpinner.style.display = 'none';
+                cmdInput.focus();
+            };
+
+            evtSource.addEventListener('exit', () => {
+                finishExecution();
+            });
+
+            evtSource.onerror = () => {
+                appendOutput('\n[Command finished or disconnected]', 'err');
+                finishExecution();
+            };
+        }
+
+        // Keydown handlers
+        cmdInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                submitCommand();
+            } else if (e.key === 'ArrowUp') {
+                if (historyIdx > 0) {
+                    historyIdx--;
+                    cmdInput.value = cmdHistory[historyIdx] || '';
+                }
+            } else if (e.key === 'ArrowDown') {
+                if (historyIdx < cmdHistory.length - 1) {
+                    historyIdx++;
+                    cmdInput.value = cmdHistory[historyIdx] || '';
+                } else {
+                    historyIdx = cmdHistory.length;
+                    cmdInput.value = '';
+                }
+            }
+        });
+    </script>
+</body>
+</html>
