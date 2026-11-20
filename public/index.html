@@ -824,6 +824,9 @@
                 <div class="pulse-dot" id="global-pulse-dot"></div>
                 <span id="global-status-text">CONNECTING...</span>
             </div>
+            <button class="btn-header" onclick="triggerGitSync()" title="Pull latest updates from GitHub" id="btn-git-sync">
+                🔄 Git Sync
+            </button>
             <button class="btn-header" onclick="toggleAgentGuide()" title="Agent Setup Guide">
                 ⚙️ Setup
             </button>
@@ -1417,6 +1420,31 @@
                 }
             }
         });
+
+        async function triggerGitSync() {
+            const btn = document.getElementById('btn-git-sync');
+            if (btn) btn.innerText = '⏳ Syncing...';
+            try {
+                const res = await fetch(`${API_BASE}/api/git/sync`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                const data = await res.json();
+                if (data.success) {
+                    appendOutput(`\n[GitHub Sync Success]\n${data.output}`, 'out');
+                    if (btn) btn.innerText = '✅ Synced!';
+                    setTimeout(() => { if (btn) btn.innerText = '🔄 Git Sync'; }, 3000);
+                } else {
+                    appendOutput(`\n[GitHub Sync Error] ${data.error || 'Failed'}`, 'err');
+                    if (btn) btn.innerText = '❌ Failed';
+                    setTimeout(() => { if (btn) btn.innerText = '🔄 Git Sync'; }, 3000);
+                }
+            } catch(e) {
+                appendOutput(`\n[GitHub Sync Error] ${e.message}`, 'err');
+                if (btn) btn.innerText = '❌ Failed';
+                setTimeout(() => { if (btn) btn.innerText = '🔄 Git Sync'; }, 3000);
+            }
+        }
     </script>
 </body>
 </html>

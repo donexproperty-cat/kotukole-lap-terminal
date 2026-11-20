@@ -59,6 +59,25 @@ setInterval(() => {
     }
 }, 60 * 60 * 1000);
 
+// Background Auto-Sync: Check GitHub every 60s as a fallback to Webhooks
+setInterval(() => {
+    try {
+        execSync('git fetch origin main', { cwd: __dirname, stdio: 'ignore' });
+        const statusOut = execSync('git status -uno', { cwd: __dirname, encoding: 'utf8' });
+        if (statusOut.includes('Your branch is behind')) {
+            console.log('[Auto-Sync] Remote changes detected! Pulling from GitHub...');
+            const pullOut = execSync('git pull origin main', { cwd: __dirname, encoding: 'utf8' });
+            console.log('[Auto-Sync] Pull result:\n' + pullOut);
+            if (pullOut.includes('server.js')) {
+                console.log('[Auto-Sync] server.js updated, self-restarting in 1s...');
+                setTimeout(() => process.exit(0), 1000);
+            }
+        }
+    } catch (e) {
+        // Silently ignore transient network blips
+    }
+}, 60 * 1000);
+
 // Laptop Agent State
 let connectedAgent = null; // { hostname, user, os, cores, lastSeen }
 let pendingCommands = [];  // [ { id, cmd, resolve, assigned, timer } ]
@@ -194,8 +213,69 @@ const server = http.createServer((req, res) => {
     }
 
     // ==========================================
-    // WEB DASHBOARD ENDPOINTS
+    // GITHUB AUTO-DEPLOY & WEBHOOK ENDPOINTS
     // ==========================================
+
+    // GitHub Webhook Endpoint: Auto-pulls within seconds of any commit on GitHub
+    if (pathname === '/api/webhook/github') {
+        if (req.method === 'GET') {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ status: 'ok', message: 'GitHub Webhook endpoint active' }));
+        }
+
+        if (req.method === 'POST') {
+            let body = '';
+            req.on('data', chunk => body += chunk);
+            req.on('end', () => {
+                const event = req.headers['x-github-event'] || 'push';
+                if (event === 'ping') {
+                    console.log('[GitHub Webhook] Ping received from GitHub! Webhook is verified.');
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ success: true, message: 'Pong! Webhook verified and active.' }));
+                }
+
+                console.log(`[GitHub Webhook] Event "${event}" received! Auto-pulling from GitHub main...`);
+                try {
+                    const pullOut = execSync('git pull origin main', { cwd: __dirname, encoding: 'utf8' });
+                    console.log('[GitHub Webhook] Pulled changes:\n' + pullOut);
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: true, output: pullOut }));
+
+                    if (pullOut.includes('server.js')) {
+                        console.log('[GitHub Webhook] server.js updated, self-restarting in 1s...');
+                        setTimeout(() => process.exit(0), 1000);
+                    }
+                } catch (err) {
+                    console.error('[GitHub Webhook Error]:', err.message);
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: err.message }));
+                }
+            });
+            return;
+        }
+    }
+
+    // Manual GitHub Sync: Triggered from web console
+    if (req.method === 'POST' && pathname === '/api/git/sync') {
+        const authHeader = req.headers['authorization'] || '';
+        const token = authHeader.replace(/^Bearer\s+/i, '') || parsedUrl.searchParams.get('token');
+        if (!isValidSession(token)) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Unauthorized' }));
+        }
+        try {
+            const pullOut = execSync('git pull origin main', { cwd: __dirname, encoding: 'utf8' });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, output: pullOut }));
+            if (pullOut.includes('server.js')) {
+                setTimeout(() => process.exit(0), 1000);
+            }
+        } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: err.message }));
+        }
+        return;
+    }
 
     // API: Login
     if (req.method === 'POST' && pathname === '/api/login') {
