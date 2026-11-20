@@ -798,6 +798,141 @@
             display: none;
         }
 
+        
+        /* Screenshot Modal & Terminal Card */
+        .screenshot-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(3, 6, 12, 0.92);
+            backdrop-filter: blur(12px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            z-index: 1000;
+        }
+
+        .screenshot-modal-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            max-width: 95vw;
+            max-height: 92vh;
+            width: 1100px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(56, 189, 248, 0.15);
+        }
+
+        .screenshot-modal-header {
+            background: #0d131f;
+            border-bottom: 1px solid var(--border);
+            padding: 12px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .screenshot-modal-body {
+            flex: 1;
+            overflow: auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #05080f;
+            padding: 12px;
+        }
+
+        .screenshot-preview-img {
+            max-width: 100%;
+            max-height: 75vh;
+            object-fit: contain;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+            cursor: zoom-in;
+            transition: transform 0.2s ease;
+        }
+
+        .screenshot-preview-img.zoomed {
+            max-height: none;
+            max-width: none;
+            cursor: zoom-out;
+        }
+
+        .term-screenshot-card {
+            background: rgba(18, 24, 36, 0.9);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 10px;
+            padding: 12px 14px;
+            margin: 8px 0;
+            max-width: 520px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+        }
+
+        .term-screenshot-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--accent-cyan);
+        }
+
+        .term-screenshot-time {
+            color: var(--text-muted);
+            font-weight: 500;
+            font-size: 0.72rem;
+        }
+
+        .term-screenshot-img-wrap {
+            position: relative;
+            border-radius: 6px;
+            overflow: hidden;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: #06090e;
+            max-height: 260px;
+        }
+
+        .term-screenshot-img-wrap img {
+            width: 100%;
+            height: auto;
+            display: block;
+            object-fit: cover;
+            transition: transform 0.25s ease;
+        }
+
+        .term-screenshot-img-wrap:hover img {
+            transform: scale(1.02);
+        }
+
+        .term-screenshot-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.85), transparent);
+            color: #fff;
+            font-size: 0.74rem;
+            padding: 16px 10px 8px;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .term-screenshot-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
         /* Mobile Adjustments */
         @media (max-width: 640px) {
             header { padding: 8px 14px; }
@@ -933,6 +1068,10 @@
                 <button class="btn-chip" onclick="runQuickAction('disks')" title="All Disk Drives and Free Space">
                     💾 Disks
                 </button>
+                <button class="btn-chip" onclick="captureScreenshot()" title="Capture real-time screenshot of physical laptop screen" style="border-color: rgba(56, 189, 248, 0.4); color: #38bdf8;">
+                    📸 Screenshot
+                </button>
+
                 <button class="btn-chip" onclick="runQuickAction('wifi_profiles')" title="17: View all saved Wi-Fi Profiles">
                     📶 Wi-Fi List
                 </button>
@@ -1004,6 +1143,7 @@
                 <!-- Suggested command pills -->
                 <div class="quick-chips-row">
                     <span class="chip-label">Suggestions:</span>
+                    <span class="chip-pill" onclick="captureScreenshot()" style="border-color: rgba(56,189,248,0.4); color: #38bdf8;">📸 screenshot</span>
                     <span class="chip-pill" onclick="insertCmd('dir')">dir</span>
                     <span class="chip-pill" onclick="insertCmd('ipconfig')">ipconfig</span>
                     <span class="chip-pill" onclick="insertCmd('tasklist')">tasklist</span>
@@ -1222,6 +1362,8 @@
                     cmd = 'systeminfo';
                 } else if (action === 'ram') {
                     cmd = 'powershell -NoProfile -Command "$m=Get-CimInstance Win32_OperatingSystem; [PSCustomObject]@{ \'Total RAM\'=[string][math]::Round($m.TotalVisibleMemorySize/1MB,1)+\' GB\'; \'Used RAM\'=[string][math]::Round(($m.TotalVisibleMemorySize-$m.FreePhysicalMemory)/1MB,1)+\' GB\'; \'Free RAM\'=[string][math]::Round($m.FreePhysicalMemory/1MB,1)+\' GB\'; \'Usage\'=[string][math]::Round((($m.TotalVisibleMemorySize-$m.FreePhysicalMemory)/$m.TotalVisibleMemorySize)*100,1)+\' %\' } | Format-List"';
+                } else if (action === 'screenshot') {
+                    cmd = 'powershell -NoProfile -ExecutionPolicy Bypass -enc WwBSAGUAZgBsAGUAYwB0AGkAbwBuAC4AQQBzAHMAZQBtAGIAbAB5AF0AOgA6AEwAbwBhAGQAVwBpAHQAaABQAGEAcgB0AGkAYQBsAE4AYQBtAGUAKAAnAFMAeQBzAHQAZQBtAC4ARAByAGEAdwBpAG4AZwAnACkAIAB8ACAATwB1AHQALQBOAHUAbABsAAoAWwBSAGUAZgBsAGUAYwB0AGkAbwBuAC4AQQBzAHMAZQBtAGIAbAB5AF0AOgA6AEwAbwBhAGQAVwBpAHQAaABQAGEAcgB0AGkAYQBsAE4AYQBtAGUAKAAnAFMAeQBzAHQAZQBtAC4AVwBpAG4AZABvAHcAcwAuAEYAbwByAG0AcwAnACkAIAB8ACAATwB1AHQALQBOAHUAbABsAAoAJABiACAAPQAgAFsAVwBpAG4AZABvAHcAcwAuAEYAbwByAG0AcwAuAFMAYwByAGUAZQBuAF0AOgA6AFAAcgBpAG0AYQByAHkAUwBjAHIAZQBlAG4ALgBCAG8AdQBuAGQAcwAKACQAYgBtAHAAIAA9ACAATgBlAHcALQBPAGIAagBlAGMAdAAgAEQAcgBhAHcAaQBuAGcALgBCAGkAdABtAGEAcAAgACQAYgAuAFcAaQBkAHQAaAAsACAAJABiAC4ASABlAGkAZwBoAHQACgAkAGcAIAA9ACAAWwBEAHIAYQB3AGkAbgBnAC4ARwByAGEAcABoAGkAYwBzAF0AOgA6AEYAcgBvAG0ASQBtAGEAZwBlACgAJABiAG0AcAApAAoAdAByAHkAIAB7AAoAIAAgACAAIAAkAGcALgBDAG8AcAB5AEYAcgBvAG0AUwBjAHIAZQBlAG4AKAAkAGIALgBMAG8AYwBhAHQAaQBvAG4ALAAgAFsARAByAGEAdwBpAG4AZwAuAFAAbwBpAG4AdABdADoAOgBFAG0AcAB0AHkALAAgACQAYgAuAFMAaQB6AGUAKQAKAH0AIABjAGEAdABjAGgAIAB7AH0ACgAkAGMAbwBkAGUAYwAgAD0AIABbAEQAcgBhAHcAaQBuAGcALgBJAG0AYQBnAGkAbgBnAC4ASQBtAGEAZwBlAEMAbwBkAGUAYwBJAG4AZgBvAF0AOgA6AEcAZQB0AEkAbQBhAGcAZQBFAG4AYwBvAGQAZQByAHMAKAApACAAfAAgAFcAaABlAHIAZQAtAE8AYgBqAGUAYwB0ACAAewAgACQAXwAuAE0AaQBtAGUAVAB5AHAAZQAgAC0AZQBxACAAJwBpAG0AYQBnAGUALwBqAHAAZQBnACcAIAB9AAoAJABwAGEAcgBhAG0AcwAgAD0AIABOAGUAdwAtAE8AYgBqAGUAYwB0ACAARAByAGEAdwBpAG4AZwAuAEkAbQBhAGcAaQBuAGcALgBFAG4AYwBvAGQAZQByAFAAYQByAGEAbQBlAHQAZQByAHMAKAAxACkACgAkAHAAYQByAGEAbQBzAC4AUABhAHIAYQBtAFsAMABdACAAPQAgAE4AZQB3AC0ATwBiAGoAZQBjAHQAIABEAHIAYQB3AGkAbgBnAC4ASQBtAGEAZwBpAG4AZwAuAEUAbgBjAG8AZABlAHIAUABhAHIAYQBtAGUAdABlAHIAKABbAEQAcgBhAHcAaQBuAGcALgBJAG0AYQBnAGkAbgBnAC4ARQBuAGMAbwBkAGUAcgBdADoAOgBRAHUAYQBsAGkAdAB5ACwAIABbAGwAbwBuAGcAXQA2ADAAKQAKACQAbQBzACAAPQAgAE4AZQB3AC0ATwBiAGoAZQBjAHQAIABJAE8ALgBNAGUAbQBvAHIAeQBTAHQAcgBlAGEAbQAKACQAYgBtAHAALgBTAGEAdgBlACgAJABtAHMALAAgACQAYwBvAGQAZQBjACwAIAAkAHAAYQByAGEAbQBzACkACgAkAGIANgA0ACAAPQAgAFsAQwBvAG4AdgBlAHIAdABdADoAOgBUAG8AQgBhAHMAZQA2ADQAUwB0AHIAaQBuAGcAKAAkAG0AcwAuAFQAbwBBAHIAcgBhAHkAKAApACkACgAkAGcALgBEAGkAcwBwAG8AcwBlACgAKQAKACQAYgBtAHAALgBEAGkAcwBwAG8AcwBlACgAKQAKACQAbQBzAC4ARABpAHMAcABvAHMAZQAoACkACgBXAHIAaQB0AGUALQBPAHUAdABwAHUAdAAgACgAJwA9AD0ASwBPAFQAVQBLAE8ATABFAF8AUwBDAFIARQBFAE4AUwBIAE8AVAA9AD0AZABhAHQAYQA6AGkAbQBhAGcAZQAvAGoAcABlAGcAOwBiAGEAcwBlADYANAAsACcAIAArACAAJABiADYANAAgACsAIAAnAD0APQBFAE4ARABfAFMAQwBSAEUARQBOAFMASABPAFQAPQA9ACcAKQA=';
                 } else if (action === 'disks') {
                     cmd = 'powershell -NoProfile -Command "Get-PSDrive -PSProvider FileSystem | Select-Object Name, @{N=\'Used(GB)\';E={[math]::Round($_.Used/1GB,1)}}, @{N=\'Free(GB)\';E={[math]::Round($_.Free/1GB,1)}}, @{N=\'Total(GB)\';E={[math]::Round(($_.Used+$_.Free)/1GB,1)}}, Root | Format-Table -AutoSize"';
                 } else if (action === 'wifi_profiles') {
@@ -1253,6 +1395,7 @@
             } else {
                 if (action === 'specs') cmd = 'lscpu | grep -E "Model name|Architecture|CPU(s)"';
                 else if (action === 'ram') cmd = 'free -h';
+                else if (action === 'screenshot') cmd = 'echo "[Notice: Screen capture requires physical Windows laptop running KotuKole Agent.]"';
                 else if (action === 'disks') cmd = 'df -h';
                 else if (action === 'wifi_profiles') cmd = 'nmcli connection show || ip a';
                 else if (action === 'wifi_pass') cmd = 'echo "Wi-Fi passwords only available on physical laptop."';
@@ -1269,6 +1412,72 @@
                 cmdInput.value = cmd;
                 submitCommand();
             }
+        }
+
+        
+        // Screen Capture Helpers
+        function captureScreenshot() {
+            closeScreenshotModal();
+            runQuickAction('screenshot');
+        }
+
+        function openScreenshotModal(imgUrl) {
+            const modal = document.getElementById('screenshot-modal');
+            const img = document.getElementById('screenshot-modal-img');
+            const dlBtn = document.getElementById('btn-download-screenshot');
+            const timeEl = document.getElementById('screenshot-timestamp');
+            if (modal && img) {
+                img.src = imgUrl;
+                img.classList.remove('zoomed');
+                if (dlBtn) dlBtn.href = imgUrl;
+                if (timeEl) {
+                    const now = new Date();
+                    timeEl.innerText = 'Captured at ' + now.toLocaleTimeString();
+                }
+                modal.style.display = 'flex';
+            }
+        }
+
+        function closeScreenshotModal() {
+            const modal = document.getElementById('screenshot-modal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function toggleZoomScreenshot() {
+            const img = document.getElementById('screenshot-modal-img');
+            if (img) img.classList.toggle('zoomed');
+        }
+
+        function onScreenshotOverlayClick(e) {
+            if (e.target.id === 'screenshot-modal') {
+                closeScreenshotModal();
+            }
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeScreenshotModal();
+        });
+
+        function renderScreenshotCard(imgUrl) {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const card = document.createElement('div');
+            card.className = 'term-screenshot-card';
+            card.innerHTML = `
+                <div class="term-screenshot-header">
+                    <span>📸 Laptop Screen Captured</span>
+                    <span class="term-screenshot-time">${timeStr}</span>
+                </div>
+                <div class="term-screenshot-img-wrap" onclick="openScreenshotModal('${imgUrl}')" title="Click to view full screen">
+                    <img src="${imgUrl}" alt="Laptop Screen" />
+                    <div class="term-screenshot-overlay">🔍 Click to enlarge / view fullscreen</div>
+                </div>
+                <div class="term-screenshot-actions">
+                    <button class="btn-chip" onclick="openScreenshotModal('${imgUrl}')">🔍 Fullscreen</button>
+                    <a href="${imgUrl}" download="kotukole-screenshot-${Date.now()}.jpg" class="btn-chip" style="text-decoration:none;">⬇️ Download (.JPG)</a>
+                </div>
+            `;
+            outputEl.appendChild(card);
         }
 
         // Speak Dialog
@@ -1290,6 +1499,26 @@
 
         // Append to Output
         function appendOutput(text, type = 'out') {
+            if (typeof text === 'string' && text.includes('==KOTUKOLE_SCREENSHOT==')) {
+                const match = text.match(/==KOTUKOLE_SCREENSHOT==([\s\S]*?)==END_SCREENSHOT==/);
+                if (match) {
+                    const imgUrl = match[1].trim();
+                    const cleanText = text.replace(/==KOTUKOLE_SCREENSHOT==[\s\S]*?==END_SCREENSHOT==/, '')
+                                          .replace(/#<\s*CLIXML[\s\S]*?<\/Objs>/i, '')
+                                          .trim();
+                    if (cleanText) {
+                        const extra = document.createElement('div');
+                        extra.className = 'term-out-text';
+                        extra.innerText = cleanText;
+                        outputEl.appendChild(extra);
+                    }
+                    renderScreenshotCard(imgUrl);
+                    openScreenshotModal(imgUrl);
+                    outputEl.scrollTop = outputEl.scrollHeight;
+                    return;
+                }
+            }
+
             const entry = document.createElement('div');
             entry.className = type === 'cmd' ? 'term-cmd-line' : type === 'err' ? 'term-err-text' : 'term-out-text';
             
@@ -1359,13 +1588,20 @@
                 return;
             }
 
+            if (cmd.toLowerCase() === 'screenshot' || cmd.toLowerCase() === 'screencap') {
+                captureScreenshot();
+                cmdInput.value = '';
+                return;
+            }
+
             // UI state: Running
             isRunningCommand = true;
             submitBtn.disabled = true;
             submitText.innerText = 'Running...';
             submitSpinner.style.display = 'inline-block';
 
-            appendOutput(cmd, 'cmd');
+            const displayCmd = cmd.includes('WwBSAGUAZgBsAGUAYwB0AGkAbwBu') ? 'screenshot (Capturing laptop screen...)' : cmd;
+            appendOutput(displayCmd, 'cmd');
             cmdHistory.push(cmd);
             historyIdx = cmdHistory.length;
             cmdInput.value = '';
@@ -1446,5 +1682,34 @@
             }
         }
     </script>
+    <!-- Screenshot Modal -->
+    <div class="screenshot-modal-overlay" id="screenshot-modal" onclick="onScreenshotOverlayClick(event)">
+        <div class="screenshot-modal-card" onclick="event.stopPropagation()">
+            <div class="screenshot-modal-header">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div class="brand-icon" style="width: 32px; height: 32px; font-size: 16px;">📸</div>
+                    <div>
+                        <h3 style="font-size: 0.95rem; font-weight: 700; color: #fff;">Laptop Screen Capture</h3>
+                        <span style="font-size: 0.72rem; color: #94a3b8;" id="screenshot-timestamp">Captured just now</span>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <a id="btn-download-screenshot" href="#" download="kotukole-laptop-screenshot.jpg" class="btn-banner btn-banner-blue" style="text-decoration: none;">
+                        ⬇️ Download (.JPG)
+                    </a>
+                    <button class="btn-banner btn-banner-green" onclick="captureScreenshot()" title="Retake Screenshot">
+                        🔄 Retake
+                    </button>
+                    <button class="btn-banner btn-banner-ghost" onclick="closeScreenshotModal()" title="Close" style="padding: 5px 10px; font-size: 0.9rem;">
+                        ✕
+                    </button>
+                </div>
+            </div>
+            <div class="screenshot-modal-body">
+                <img id="screenshot-modal-img" src="" alt="Laptop Screen" class="screenshot-preview-img" onclick="toggleZoomScreenshot()" title="Click to Zoom / Toggle fit" />
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>
