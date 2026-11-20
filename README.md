@@ -14,7 +14,7 @@ A high-performance remote terminal and hardware inspection console connecting ph
 2. **`public/index.html`**
    - Modern, responsive web terminal and hardware dashboard.
    - Live real-time hardware gauges for CPU, RAM, Disk, and System OS.
-   - Quick action chips for Specs, RAM Info, Disks, Wi-Fi Profiles, Wi-Fi Passwords extractor, Signal Strength, Public IP, Apps, Files, Lock Screen, and Text-to-Speech.
+   - Quick action chips for Specs, RAM Info, Disks, 📸 Screen Capture (with live modal preview & download), Wi-Fi Profiles, Wi-Fi Passwords extractor, Signal Strength, Public IP, Apps, Files, Lock Screen, and Text-to-Speech.
    - Command history navigation (Arrow Up / Arrow Down), Copy Output, and Fullscreen toggle.
 
 3. **`KotuKoleAgent.cs`**
