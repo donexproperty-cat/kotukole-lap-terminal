@@ -30,7 +30,7 @@ A high-performance remote administration console and hardware inspection dashboa
      ```
 
 5. **`webcam-agent.ps1` (Standalone Webcam Agent)**
-   - Windows client using native `avicap32.dll` to poll `/api/poll` and upload snapshots to `/api/upload-webcam`.
+   - Windows client using native modern WinRT `Windows.Media.Capture` (with legacy fallback) to poll `/api/poll` and upload snapshots to `/api/upload-webcam`.
    - Supports configurable ServerURL parameter:
      ```powershell
      powershell -ExecutionPolicy Bypass -File .\webcam-agent.ps1 -ServerURL https://kotukole.com/lap

