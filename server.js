@@ -228,9 +228,14 @@ setInterval(() => {
 // Laptop Agent State
 let connectedAgent = null; // { hostname, user, os, cores, lastSeen }
 let pendingCommands = [];  // [ { id, cmd, resolve, assigned, timer } ]
+let lastWebcamPoll = 0;
 
 function isAgentOnline() {
     return connectedAgent && (Date.now() - connectedAgent.lastSeen < 7000);
+}
+
+function isWebcamAgentOnline() {
+    return (Date.now() - lastWebcamPoll < 12000);
 }
 
 function getSystemStats() {
@@ -262,6 +267,7 @@ function getSystemStats() {
 
     return {
         agent: isAgentOnline() ? { ...connectedAgent, online: true } : null,
+        webcamAgent: isWebcamAgentOnline() ? { online: true, lastSeen: lastWebcamPoll } : null,
         hostname: os.hostname(),
         platform: `${os.type()} ${os.release()} (${os.arch()})`,
         uptime: uptimeStr,
@@ -361,6 +367,7 @@ const server = http.createServer((req, res) => {
 
     // Webcam Agent Polling (GET /api/poll)
     if (req.method === 'GET' && pathname === '/api/poll') {
+        lastWebcamPoll = Date.now();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (agentCommandQueue.length > 0) {
             const cmd = agentCommandQueue.shift();
@@ -383,7 +390,7 @@ const server = http.createServer((req, res) => {
                 return res.end(JSON.stringify({ success: false, error: 'No webcam photo uploaded.' }));
             }
 
-            const imageUrl = `/uploads/${req.file.filename}`;
+            const imageUrl = `/lap/uploads/${req.file.filename}`;
 
             // Notify all connected web dashboards live via SSE
             sseClients.forEach(client => {
@@ -619,7 +626,7 @@ const server = http.createServer((req, res) => {
                     pendingCommands.splice(idx, 1);
                     sendEvent('stderr', '\n[ERROR] Laptop command timed out after 30 seconds.\n');
                     sendEvent('exit', { code: 1 });
-                    res.end();
+                    setTimeout(() => { try { res.end(); } catch(e) {} }, 50);
                 }
             }, 30000);
 
@@ -631,7 +638,7 @@ const server = http.createServer((req, res) => {
                 resolve: (output) => {
                     sendEvent('stdout', output + '\n');
                     sendEvent('exit', { code: 0 });
-                    res.end();
+                    setTimeout(() => { try { res.end(); } catch(e) {} }, 50);
                 }
             });
 
@@ -666,12 +673,12 @@ const server = http.createServer((req, res) => {
         child.on('error', err => {
             sendEvent('stderr', `Execution Error: ${err.message}\n`);
             sendEvent('exit', { code: 1 });
-            res.end();
+            setTimeout(() => { try { res.end(); } catch(e) {} }, 50);
         });
 
         child.on('close', code => {
             sendEvent('exit', { code: code ?? 0 });
-            res.end();
+            setTimeout(() => { try { res.end(); } catch(e) {} }, 50);
         });
 
         req.on('close', () => {
@@ -705,9 +712,10 @@ const server = http.createServer((req, res) => {
         }
     }
 
-    // Serve Uploaded Media (/uploads/snap-xxx.jpg)
-    if (pathname.startsWith('/uploads/')) {
-        const imgName = path.basename(pathname);
+    // Serve Uploaded Media (/uploads/snap-xxx.jpg or /lap/uploads/snap-xxx.jpg)
+    const uploadMatch = pathname.match(/^(?:\/lap)?\/uploads\/(.+)$/);
+    if (uploadMatch) {
+        const imgName = path.basename(uploadMatch[1]);
         const imgPath = path.join(uploadDir, imgName);
         const resolvedPath = path.resolve(imgPath);
         const resolvedUpload = path.resolve(uploadDir);

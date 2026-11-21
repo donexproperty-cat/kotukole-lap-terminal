@@ -1380,22 +1380,40 @@
                     document.getElementById('banner-sub').innerText = `Commands route directly to your physical laptop • Live and healthy.`;
                 } else {
                     isLaptopOnline = false;
-                    statusPill.style.background = 'rgba(234, 179, 8, 0.15)';
-                    statusPill.style.borderColor = 'rgba(234, 179, 8, 0.4)';
-                    statusPill.style.color = '#eab308';
-                    pulseDot.style.background = '#eab308';
-                    statusText.innerText = `🟡 CLOUD VPS (Laptop Agent Offline)`;
+                    const isWebcamActive = stats.webcamAgent && stats.webcamAgent.online;
+
+                    if (isWebcamActive) {
+                        statusPill.style.background = 'rgba(168, 85, 247, 0.15)';
+                        statusPill.style.borderColor = 'rgba(168, 85, 247, 0.4)';
+                        statusPill.style.color = '#c084fc';
+                        pulseDot.style.background = '#c084fc';
+                        statusText.innerText = `🟣 WEBCAM AGENT: ACTIVE (SILENT MODE)`;
+
+                        agentBanner.classList.add('connected');
+                        document.getElementById('banner-title').innerHTML = `Webcam Agent <span style="color:#c084fc">ACTIVE</span> (Background Mode)`;
+                        document.getElementById('banner-sub').innerText = `Hidden webcam agent is running on laptop • Ready to capture webcam photos instantly.`;
+                    } else {
+                        statusPill.style.background = 'rgba(234, 179, 8, 0.15)';
+                        statusPill.style.borderColor = 'rgba(234, 179, 8, 0.4)';
+                        statusPill.style.color = '#eab308';
+                        pulseDot.style.background = '#eab308';
+                        statusText.innerText = `🟡 CLOUD VPS (Laptop Agent Offline)`;
+
+                        agentBanner.classList.remove('connected');
+                        document.getElementById('banner-title').innerText = `Physical Laptop Agent Setup`;
+                        document.getElementById('banner-sub').innerText = `Run the 12KB Agent or PowerShell command on your laptop to link directly.`;
+                    }
 
                     document.getElementById('term-user-host').innerText = `${stats.user}@${stats.hostname} [Cloud VPS]`;
                     document.getElementById('prompt-label').innerText = `vps:~$`;
-                    cmdInput.placeholder = "Laptop offline. Shell commands will run on cloud VPS...";
+                    cmdInput.placeholder = isWebcamActive ? "Webcam agent active • Shell commands will run on cloud VPS..." : "Laptop offline. Shell commands will run on cloud VPS...";
 
                     document.getElementById('cpu-cores').innerText = `${stats.cpu.cores} Cores`;
                     document.getElementById('cpu-badge').innerText = 'VPS Host';
                     document.getElementById('cpu-model').innerText = stats.cpu.model;
                     document.getElementById('os-name').innerText = stats.platform;
-                    document.getElementById('status-tag').innerText = 'VPS FALLBACK';
-                    document.getElementById('status-tag').style.color = '#eab308';
+                    document.getElementById('status-tag').innerText = isWebcamActive ? 'CAM READY' : 'VPS FALLBACK';
+                    document.getElementById('status-tag').style.color = isWebcamActive ? '#c084fc' : '#eab308';
 
                     document.getElementById('ram-used').innerText = stats.memory.used;
                     document.getElementById('ram-total').innerText = `Total: ${stats.memory.total}`;
@@ -1408,10 +1426,6 @@
                         document.getElementById('disk-badge').innerText = stats.disk.pct;
                         document.getElementById('disk-bar').style.width = stats.disk.pct;
                     }
-
-                    agentBanner.classList.remove('connected');
-                    document.getElementById('banner-title').innerText = `Physical Laptop Agent Setup`;
-                    document.getElementById('banner-sub').innerText = `Run the 12KB Agent or PowerShell command on your laptop to link directly.`;
                 }
 
                 document.getElementById('uptime').innerText = stats.uptime || 'Active';
@@ -1485,6 +1499,16 @@
         }
 
         
+        // URL normalizer for media paths behind reverse proxy
+        function normalizeMediaUrl(url) {
+            if (!url) return '';
+            if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('http://') || url.startsWith('https://')) return url;
+            if (url.startsWith('/lap/')) return url;
+            if (url.startsWith('/uploads/')) return '/lap' + url;
+            if (url.startsWith('uploads/')) return '/lap/' + url;
+            return '/lap/' + url.replace(/^\/+/, '');
+        }
+
         // Screen Capture Helpers
         function captureScreenshot() {
             closeScreenshotModal();
@@ -1492,6 +1516,7 @@
         }
 
         function openScreenshotModal(imgUrl) {
+            imgUrl = normalizeMediaUrl(imgUrl);
             const modal = document.getElementById('screenshot-modal');
             const img = document.getElementById('screenshot-modal-img');
             const dlBtn = document.getElementById('btn-download-screenshot');
@@ -1529,6 +1554,7 @@
         });
 
         function renderScreenshotCard(imgUrl) {
+            imgUrl = normalizeMediaUrl(imgUrl);
             const now = new Date();
             const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             const card = document.createElement('div');
@@ -1551,12 +1577,39 @@
         }
 
         // Webcam Capture Helpers
-        function captureWebcam() {
+        async function captureWebcam() {
             closeWebcamModal();
-            runQuickAction('webcam');
+            appendOutput('📷 [Webcam Request] Sending capture command to laptop...', 'cmd');
+
+            let queuedToAgent = false;
+            try {
+                const res = await fetch(`${API_BASE}/command?token=${encodeURIComponent(authToken)}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({ command: 'webcam' })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    queuedToAgent = true;
+                    appendOutput('📸 [Webcam Agent] Capture command queued! Waiting for camera frame from laptop...', 'out');
+                }
+            } catch(e) {
+                console.warn('Could not queue to /api/command:', e);
+            }
+
+            if (isLaptopOnline) {
+                // If full K-Term Terminal Agent is online, trigger direct PowerShell capture
+                runQuickAction('webcam');
+            } else if (!queuedToAgent) {
+                appendOutput('⚠️ [Notice] Laptop Agent not detected. Please ensure Start-Webcam-Hidden.vbs or K-Term Agent is running on your laptop.', 'err');
+            }
         }
 
         function openWebcamModal(imgUrl) {
+            imgUrl = normalizeMediaUrl(imgUrl);
             const modal = document.getElementById('webcam-modal');
             const img = document.getElementById('webcam-modal-img');
             const dlBtn = document.getElementById('btn-download-webcam');
@@ -1590,6 +1643,7 @@
         }
 
         function renderWebcamCard(imgUrl) {
+            imgUrl = normalizeMediaUrl(imgUrl);
             const now = new Date();
             const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             const card = document.createElement('div');
@@ -1618,6 +1672,7 @@
         }
 
         function renderAudioCard(audioUrl) {
+            audioUrl = normalizeMediaUrl(audioUrl);
             const now = new Date();
             const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             const card = document.createElement('div');
@@ -1832,6 +1887,7 @@
             historyIdx = cmdHistory.length;
             cmdInput.value = '';
 
+            let exitedNormally = false;
             const evtSource = new EventSource(`${API_BASE}/exec?cmd=${encodeURIComponent(cmd)}&token=${encodeURIComponent(authToken)}`);
 
             evtSource.addEventListener('stdout', (e) => {
@@ -1845,7 +1901,7 @@
             });
 
             const finishExecution = () => {
-                evtSource.close();
+                try { evtSource.close(); } catch(e) {}
                 isRunningCommand = false;
                 submitBtn.disabled = false;
                 submitText.innerText = 'Run';
@@ -1854,11 +1910,14 @@
             };
 
             evtSource.addEventListener('exit', () => {
+                exitedNormally = true;
                 finishExecution();
             });
 
             evtSource.onerror = () => {
-                appendOutput('\n[Command finished or disconnected]', 'err');
+                if (!exitedNormally) {
+                    appendOutput('\n[Connection closed or disconnected]', 'err');
+                }
                 finishExecution();
             };
         }
@@ -1887,7 +1946,7 @@
             const btn = document.getElementById('btn-git-sync');
             if (btn) btn.innerText = '⏳ Syncing...';
             try {
-                const res = await fetch(`${API_BASE}/api/git/sync`, {
+                const res = await fetch(`${API_BASE}/git/sync`, {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${authToken}` }
                 });
@@ -1920,8 +1979,10 @@
                     try {
                         const data = JSON.parse(event.data);
                         if (data.type === 'webcam_update' && data.url) {
-                            renderWebcamCard(data.url);
-                            openWebcamModal(data.url);
+                            const cleanUrl = normalizeMediaUrl(data.url);
+                            appendOutput('✅ [Webcam Success] Real-time photo received from laptop!', 'out');
+                            renderWebcamCard(cleanUrl);
+                            openWebcamModal(cleanUrl);
                         }
                     } catch(e) {}
                 };

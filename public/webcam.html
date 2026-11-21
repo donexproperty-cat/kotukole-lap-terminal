@@ -31,7 +31,17 @@ img { max-width: 100%; border-radius: 8px; border: 2px solid #444; }
 </div>
 
 <script>
+const API_BASE = window.location.pathname.startsWith('/lap') ? '/lap/api' : '/api';
 let authToken = localStorage.getItem('kterm_lap_token') || '';
+
+function normalizeMediaUrl(url) {
+    if (!url) return '';
+    if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('http://') || url.startsWith('https://')) return url;
+    if (url.startsWith('/lap/')) return url;
+    if (url.startsWith('/uploads/')) return '/lap' + url;
+    if (url.startsWith('uploads/')) return '/lap/' + url;
+    return '/lap/' + url.replace(/^\/+/, '');
+}
 
 async function checkAuth() {
     if (!authToken) {
@@ -41,7 +51,7 @@ async function checkAuth() {
             return;
         }
         try {
-            const res = await fetch('/api/login', {
+            const res = await fetch(`${API_BASE}/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ password: pwd })
@@ -69,12 +79,12 @@ function initSSE() {
     if (eventSource) {
         try { eventSource.close(); } catch(e) {}
     }
-    eventSource = new EventSource('/api/events?token=' + encodeURIComponent(authToken));
+    eventSource = new EventSource(`${API_BASE}/events?token=` + encodeURIComponent(authToken));
     eventSource.onmessage = function(event) {
         try {
             const data = JSON.parse(event.data);
             if (data.type === 'webcam_update') {
-                document.getElementById('webcam-image').src = data.url;
+                document.getElementById('webcam-image').src = normalizeMediaUrl(data.url);
                 document.getElementById('webcam-container').style.display = 'block';
                 document.getElementById('statusMsg').innerText = "Photo received successfully!";
                 document.getElementById('btnCapture').disabled = false;
@@ -98,7 +108,7 @@ function requestWebcam() {
     status.innerText = "Sending command to remote PC... Please wait.";
     status.style.color = "yellow";
 
-    fetch('/api/command?token=' + encodeURIComponent(authToken), {
+    fetch(`${API_BASE}/command?token=` + encodeURIComponent(authToken), {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
