@@ -1,10 +1,10 @@
-# KotuKole Laptop Agent (PowerShell Edition)
-$host.UI.RawUI.WindowTitle = "KotuKole ⚡ Physical Laptop Agent (PS)"
+# K-Term Laptop Agent (PowerShell Edition)
+$host.UI.RawUI.WindowTitle = "K-Term ⚡ Physical Laptop Agent (PS)"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 [Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
 
 Write-Host "=================================================================" -ForegroundColor Cyan
-Write-Host "        ⚡ KOTUKOLE PHYSICAL LAPTOP CONNECTOR (PS AGENT) ⚡     " -ForegroundColor Cyan
+Write-Host "        ⚡ K-TERM PHYSICAL LAPTOP CONNECTOR (PS AGENT) ⚡       " -ForegroundColor Cyan
 Write-Host "=================================================================`n" -ForegroundColor Cyan
 
 $serverUrl = "https://kotukole.com/lap"
@@ -25,7 +25,7 @@ Write-Host "[*] User Name                 : $username"
 Write-Host "[*] Processor (CPU)           : $cpuModel"
 Write-Host "[*] CPU Cores                 : $cores"
 Write-Host "[*] Operating OS              : $osName"
-Write-Host "`n[+] Status: CONNECTED & LISTENING for commands from kotukole.com/lap" -ForegroundColor Green
+Write-Host "`n[+] Status: CONNECTED & LISTENING for commands from Server" -ForegroundColor Green
 Write-Host "[+] Keep this window open while using the web console.`n"
 
 $lastHandledId = ""

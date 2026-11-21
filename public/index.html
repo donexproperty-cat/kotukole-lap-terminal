@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>KotuKole ⚡ Web Terminal & Laptop Control</title>
+    <title>K-Term ⚡ Web Terminal & Laptop Control</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -1001,7 +1001,7 @@
         <div class="brand">
             <div class="brand-icon">⚡</div>
             <div class="brand-text">
-                <h1>KotuKole Console</h1>
+                <h1>K-Term Console</h1>
                 <p>Physical Laptop Remote Control</p>
             </div>
         </div>
@@ -1037,13 +1037,13 @@
                 <button class="btn-banner btn-banner-ghost" onclick="copyPsOneLiner()">
                     📋 Copy PowerShell 1-Liner
                 </button>
-                <a href="KotuKole-Laptop.exe" download class="btn-banner btn-banner-blue">
+                <a href="K-Term.exe" download class="btn-banner btn-banner-blue">
                     ⚡ Direct .EXE (12KB)
                 </a>
                 <a href="Start-Laptop-Agent.bat" download class="btn-banner btn-banner-green">
                     🚀 1-Click .BAT
                 </a>
-                <a href="KotuKole-Console-Source.zip" download class="btn-banner" style="background: #8b5cf6; color: #fff;">
+                <a href="K-Term-Source.zip" download class="btn-banner" style="background: #8b5cf6; color: #fff;">
                     📦 Source Code (.ZIP)
                 </a>
             </div>
@@ -1191,7 +1191,7 @@
 
             <!-- Terminal Output Area -->
             <div class="terminal-body" id="term-output" onclick="focusInput()">
-                <div style="color: #64748b;">[KotuKole Lap Terminal v2.0 Ready]</div>
+                <div style="color: #64748b;">[K-Term v2.0 Ready]</div>
                 <div style="color: #64748b;">Type any command or click the Quick Action chips above.</div>
             </div>
 
@@ -1207,7 +1207,7 @@
                     <span class="chip-pill" onclick="insertCmd('ipconfig')">ipconfig</span>
                     <span class="chip-pill" onclick="insertCmd('tasklist')">tasklist</span>
                     <span class="chip-pill" onclick="insertCmd('whoami')">whoami</span>
-                    <span class="chip-pill" onclick="insertCmd('echo Hello from KotuKole')">echo</span>
+                    <span class="chip-pill" onclick="insertCmd('echo Hello from K-Term')">echo</span>
                     <span class="chip-pill" onclick="insertCmd('start calc')">calc</span>
                     <span class="chip-pill" onclick="insertCmd('start notepad')">notepad</span>
                     <span class="chip-pill" onclick="insertCmd('systeminfo')">systeminfo</span>
@@ -1233,7 +1233,7 @@
     <div class="auth-overlay" id="auth-modal">
         <div class="auth-card">
             <div class="auth-icon">🔐</div>
-            <h2>KotuKole Terminal</h2>
+            <h2>K-Term Terminal</h2>
             <p>Access Password එක ඇතුළත් කර Console එක Unlock කරගන්න.</p>
             <input type="password" id="auth-password" class="auth-input" placeholder="Password ඇතුළත් කරන්න" autofocus>
             <button class="auth-btn" onclick="login()">Unlock Terminal</button>
@@ -1243,7 +1243,7 @@
 
     <script>
         const API_BASE = (window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname + '/').replace(/\/+$/, '') + '/api';
-        let authToken = localStorage.getItem('kotukole_lap_token') || '';
+        let authToken = localStorage.getItem('kterm_lap_token') || localStorage.getItem('kotukole_lap_token') || '';
         let cmdHistory = [];
         let historyIdx = -1;
         let isLaptopOnline = false;
@@ -1303,7 +1303,7 @@
                 const data = await res.json();
                 if (data.success && data.token) {
                     authToken = data.token;
-                    localStorage.setItem('kotukole_lap_token', authToken);
+                    localStorage.setItem('kterm_lap_token', authToken);
                     hideLogin();
                     loadStats();
                     setInterval(loadStats, 3000);
@@ -1453,14 +1453,14 @@
                 } else if (action === 'lock') {
                     cmd = 'rundll32.exe user32.dll,LockWorkStation';
                 } else if (action === 'save_code') {
-                    cmd = 'powershell -NoProfile -Command "$d=[Environment]::GetFolderPath(\'Desktop\')+\'\\KotuKole-Console-Source\'; if(!(Test-Path $d)){mkdir $d|Out-Null}; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri \'https://kotukole.com/lap/KotuKole-Console-Source.zip\' -OutFile \"$d\\source.zip\"; Expand-Archive \"$d\\source.zip\" $d -Force; del \"$d\\source.zip\"; explorer $d; Get-ChildItem $d | Format-Table Name, Length"';
+                    cmd = 'powershell -NoProfile -Command "$d=[Environment]::GetFolderPath(\'Desktop\')+\'\\K-Term-Source\'; if(!(Test-Path $d)){mkdir $d|Out-Null}; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri \'https://kotukole.com/lap/K-Term-Source.zip\' -OutFile \"$d\\source.zip\"; Expand-Archive \"$d\\source.zip\" $d -Force; del \"$d\\source.zip\"; explorer $d; Get-ChildItem $d | Format-Table Name, Length"';
                 }
             } else {
                 if (action === 'specs') cmd = 'lscpu | grep -E "Model name|Architecture|CPU(s)"';
                 else if (action === 'ram') cmd = 'free -h';
-                else if (action === 'screenshot') cmd = 'echo "[Notice: Screen capture requires physical Windows laptop running KotuKole Agent.]"';
-                else if (action === 'webcam') cmd = 'echo "[Notice: Webcam capture requires physical Windows laptop running KotuKole Agent.]"';
-                else if (action === 'mic') cmd = 'echo "[Notice: Microphone audio recording requires physical Windows laptop running KotuKole Agent.]"';
+                else if (action === 'screenshot') cmd = 'echo "[Notice: Screen capture requires physical Windows laptop running K-Term Agent.]"';
+                else if (action === 'webcam') cmd = 'echo "[Notice: Webcam capture requires physical Windows laptop running K-Term Agent.]"';
+                else if (action === 'mic') cmd = 'echo "[Notice: Microphone audio recording requires physical Windows laptop running K-Term Agent.]"';
                 else if (action === 'disks') cmd = 'df -h';
                 else if (action === 'wifi_profiles') cmd = 'nmcli connection show || ip a';
                 else if (action === 'wifi_pass') cmd = 'echo "Wi-Fi passwords only available on physical laptop."';
@@ -1539,7 +1539,7 @@
                 </div>
                 <div class="term-screenshot-actions">
                     <button class="btn-chip" onclick="openScreenshotModal('${imgUrl}')">🔍 Fullscreen</button>
-                    <a href="${imgUrl}" download="kotukole-screenshot-${Date.now()}.jpg" class="btn-chip" style="text-decoration:none;">⬇️ Download (.JPG)</a>
+                    <a href="${imgUrl}" download="kterm-screenshot-${Date.now()}.jpg" class="btn-chip" style="text-decoration:none;">⬇️ Download (.JPG)</a>
                 </div>
             `;
             outputEl.appendChild(card);
@@ -1601,7 +1601,7 @@
                 </div>
                 <div class="term-screenshot-actions">
                     <button class="btn-chip" onclick="openWebcamModal('${imgUrl}')" style="border-color:rgba(168,85,247,0.4); color:#c084fc;">🔍 Fullscreen</button>
-                    <a href="${imgUrl}" download="kotukole-webcam-${Date.now()}.jpg" class="btn-chip" style="text-decoration:none;">⬇️ Download (.JPG)</a>
+                    <a href="${imgUrl}" download="kterm-webcam-${Date.now()}.jpg" class="btn-chip" style="text-decoration:none;">⬇️ Download (.JPG)</a>
                 </div>
             `;
             outputEl.appendChild(card);
@@ -1630,7 +1630,7 @@
                     <audio controls src="${audioUrl}"></audio>
                 </div>
                 <div class="term-audio-actions">
-                    <a href="${audioUrl}" download="kotukole-mic-${Date.now()}.wav" class="btn-chip" style="text-decoration:none; border-color:rgba(239,68,68,0.4); color:#f87171;">
+                    <a href="${audioUrl}" download="kterm-mic-${Date.now()}.wav" class="btn-chip" style="text-decoration:none; border-color:rgba(239,68,68,0.4); color:#f87171;">
                         ⬇️ Download (.WAV)
                     </a>
                     <button class="btn-chip" onclick="recordAudio(5)" style="border-color:rgba(56,189,248,0.4); color:#38bdf8;">
@@ -1650,7 +1650,7 @@
 
         // Speak Dialog
         function speakDialog() {
-            const text = prompt('ඔබේ Laptop එකේ Speaker එකෙන් ශබ්ද නඟා කියවිය යුතු වාක්‍යය ඇතුළත් කරන්න:', 'Hello boss! KotuKole terminal is connected.');
+            const text = prompt('ඔබේ Laptop එකේ Speaker එකෙන් ශබ්ද නඟා කියවිය යුතු වාක්‍යය ඇතුළත් කරන්න:', 'Hello boss! K-Term is connected.');
             if (text) {
                 const safeText = text.replace(/'/g, "''");
                 const speakCmd = `powershell -NoProfile -Command "Add-Type -AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak('${safeText}')"`;
@@ -1667,11 +1667,11 @@
 
         // Append to Output
         function appendOutput(text, type = 'out') {
-            if (typeof text === 'string' && text.includes('==KOTUKOLE_SCREENSHOT==')) {
-                const match = text.match(/==KOTUKOLE_SCREENSHOT==([\s\S]*?)==END_SCREENSHOT==/);
+            if (typeof text === 'string' && (text.includes('==KTERM_SCREENSHOT==') || text.includes('==KOTUKOLE_SCREENSHOT=='))) {
+                const match = text.match(/==(?:KTERM|KOTUKOLE)_SCREENSHOT==([\s\S]*?)==END_SCREENSHOT==/);
                 if (match) {
                     const imgUrl = match[1].trim();
-                    const cleanText = text.replace(/==KOTUKOLE_SCREENSHOT==[\s\S]*?==END_SCREENSHOT==/, '')
+                    const cleanText = text.replace(/==(?:KTERM|KOTUKOLE)_SCREENSHOT==[\s\S]*?==END_SCREENSHOT==/, '')
                                           .replace(/#<\s*CLIXML[\s\S]*?<\/Objs>/i, '')
                                           .trim();
                     if (cleanText) {
@@ -1687,11 +1687,11 @@
                 }
             }
 
-            if (typeof text === 'string' && text.includes('==KOTUKOLE_WEBCAM==')) {
-                const match = text.match(/==KOTUKOLE_WEBCAM==([\s\S]*?)==END_WEBCAM==/);
+            if (typeof text === 'string' && (text.includes('==KTERM_WEBCAM==') || text.includes('==KOTUKOLE_WEBCAM=='))) {
+                const match = text.match(/==(?:KTERM|KOTUKOLE)_WEBCAM==([\s\S]*?)==END_WEBCAM==/);
                 if (match) {
                     const imgUrl = match[1].trim();
-                    const cleanText = text.replace(/==KOTUKOLE_WEBCAM==[\s\S]*?==END_WEBCAM==/, '')
+                    const cleanText = text.replace(/==(?:KTERM|KOTUKOLE)_WEBCAM==[\s\S]*?==END_WEBCAM==/, '')
                                           .replace(/#<\s*CLIXML[\s\S]*?<\/Objs>/i, '')
                                           .trim();
                     if (cleanText) {
@@ -1707,11 +1707,11 @@
                 }
             }
 
-            if (typeof text === 'string' && text.includes('==KOTUKOLE_AUDIO==')) {
-                const match = text.match(/==KOTUKOLE_AUDIO==([\s\S]*?)==END_AUDIO==/);
+            if (typeof text === 'string' && (text.includes('==KTERM_AUDIO==') || text.includes('==KOTUKOLE_AUDIO=='))) {
+                const match = text.match(/==(?:KTERM|KOTUKOLE)_AUDIO==([\s\S]*?)==END_AUDIO==/);
                 if (match) {
                     const audioUrl = match[1].trim();
-                    const cleanText = text.replace(/==KOTUKOLE_AUDIO==[\s\S]*?==END_AUDIO==/, '')
+                    const cleanText = text.replace(/==(?:KTERM|KOTUKOLE)_AUDIO==[\s\S]*?==END_AUDIO==/, '')
                                           .replace(/#<\s*CLIXML[\s\S]*?<\/Objs>/i, '')
                                           .trim();
                     if (cleanText) {
@@ -1928,7 +1928,7 @@
                     </div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <a id="btn-download-screenshot" href="#" download="kotukole-laptop-screenshot.jpg" class="btn-banner btn-banner-blue" style="text-decoration: none;">
+                    <a id="btn-download-screenshot" href="#" download="kterm-laptop-screenshot.jpg" class="btn-banner btn-banner-blue" style="text-decoration: none;">
                         ⬇️ Download (.JPG)
                     </a>
                     <button class="btn-banner btn-banner-green" onclick="captureScreenshot()" title="Retake Screenshot">
@@ -1957,7 +1957,7 @@
                     </div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <a id="btn-download-webcam" href="#" download="kotukole-laptop-webcam.jpg" class="btn-banner btn-banner-blue" style="text-decoration: none;">
+                    <a id="btn-download-webcam" href="#" download="kterm-laptop-webcam.jpg" class="btn-banner btn-banner-blue" style="text-decoration: none;">
                         ⬇️ Download (.JPG)
                     </a>
                     <button class="btn-banner btn-banner-green" onclick="captureWebcam()" title="Retake Photo" style="background: linear-gradient(135deg, #9333ea, #a855f7);">

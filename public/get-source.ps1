@@ -1,13 +1,13 @@
-# KotuKole Console Source Code Downloader & Extractor
+# K-Term Console Source Code Downloader & Extractor
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 [Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
 
 Write-Host "=================================================================" -ForegroundColor Cyan
-Write-Host "      ⚡ DOWNLOADING KOTUKOLE CONSOLE SOURCE TO DESKTOP ⚡       " -ForegroundColor Cyan
+Write-Host "      ⚡ DOWNLOADING K-TERM CONSOLE SOURCE TO DESKTOP ⚡         " -ForegroundColor Cyan
 Write-Host "=================================================================`n" -ForegroundColor Cyan
 
 $desktop = [Environment]::GetFolderPath('Desktop')
-$targetFolder = Join-Path $desktop "KotuKole-Console-Source"
+$targetFolder = Join-Path $desktop "K-Term-Source"
 
 if (-not (Test-Path $targetFolder)) {
     New-Item -ItemType Directory -Path $targetFolder -Force | Out-Null
@@ -16,9 +16,9 @@ if (-not (Test-Path $targetFolder)) {
 $zipPath = Join-Path $targetFolder "source.zip"
 
 Write-Host "[*] Target Folder: $targetFolder"
-Write-Host "[*] Downloading source package from kotukole.com..." -ForegroundColor Yellow
+Write-Host "[*] Downloading source package from Server..." -ForegroundColor Yellow
 
-Invoke-WebRequest -Uri "https://kotukole.com/lap/KotuKole-Console-Source.zip" -OutFile $zipPath
+Invoke-WebRequest -Uri "https://kotukole.com/lap/K-Term-Source.zip" -OutFile $zipPath
 
 if (Test-Path $zipPath) {
     Write-Host "[+] Extracting project files..." -ForegroundColor Green

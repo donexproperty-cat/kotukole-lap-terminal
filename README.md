@@ -1,4 +1,4 @@
-# KotuKole ⚡ Web Terminal, Hardware Monitor, Webcam & Audio Console
+# K-Term ⚡ Web Terminal, Hardware Monitor, Webcam & Audio Console
 
 A high-performance remote administration console and hardware inspection dashboard connecting physical Windows laptops to a web-based management center with live terminal execution, real-time screen capture, instant webcam photos, and live ambient microphone recording.
 
@@ -36,7 +36,7 @@ A high-performance remote administration console and hardware inspection dashboa
      powershell -ExecutionPolicy Bypass -File .\webcam-agent.ps1 -ServerURL https://kotukole.com/lap
      ```
 
-6. **`KotuKoleAgent.cs` (Compiled Native Agent)**
+6. **`KTermAgent.cs` / `K-Term.exe` (Compiled Native Agent)**
    - High-performance, lightweight (12KB) C# Windows client.
 
 ---
@@ -63,4 +63,4 @@ powershell -ExecutionPolicy Bypass -File .\webcam-agent.ps1
 ```
 
 ---
-⚡ *Built with KotuKole Engine for Dinujaya.*
+⚡ *Built with K-Term Engine for Dinujaya.*

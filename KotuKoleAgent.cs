@@ -61,10 +61,10 @@ namespace KotuKole
 
         static void RunAgent(string[] args)
         {
-            Console.Title = "KotuKole ⚡ Physical Laptop Agent";
+            Console.Title = "K-Term ⚡ Physical Laptop Agent";
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("=================================================================");
-            Console.WriteLine("        ⚡ KOTUKOLE PHYSICAL LAPTOP CONNECTOR AGENT ⚡           ");
+            Console.WriteLine("        ⚡ K-TERM PHYSICAL LAPTOP CONNECTOR AGENT ⚡             ");
             Console.WriteLine("=================================================================\n");
             Console.ResetColor();
 
@@ -114,7 +114,7 @@ namespace KotuKole
             Console.WriteLine("[*] CPU Cores                 : " + Environment.ProcessorCount);
             Console.WriteLine("[*] Operating OS              : " + Environment.OSVersion.ToString());
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("\n[+] Status: CONNECTED & LISTENING for commands from kotukole.com/lap");
+            Console.WriteLine("\n[+] Status: CONNECTED & LISTENING for commands from Server");
             Console.WriteLine("[+] Keep this window open while using the web console.\n");
             Console.ResetColor();
 

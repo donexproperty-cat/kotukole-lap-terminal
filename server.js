@@ -265,7 +265,7 @@ const server = http.createServer((req, res) => {
     }
 
     // ==========================================
-    // AGENT ENDPOINTS (Called by KotuKoleAgent.exe)
+    // AGENT ENDPOINTS (Called by K-Term Agent)
     // ==========================================
 
     // Agent Poll Endpoint: Heartbeat & Command Fetching
@@ -407,7 +407,7 @@ const server = http.createServer((req, res) => {
             try {
                 const data = JSON.parse(body || '{}');
                 const userPass = (data.password || '').toString().trim();
-                if (userPass.toUpperCase() === 'DINUJAYA' || userPass === 'kotukole123') {
+                if (userPass.toUpperCase() === 'DINUJAYA' || userPass.toLowerCase() === 'kterm123' || userPass === 'kotukole123') {
                     const token = generateToken();
                     res.writeHead(200, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ success: true, token }));
@@ -464,7 +464,7 @@ const server = http.createServer((req, res) => {
 
         // IF PHYSICAL LAPTOP AGENT IS ONLINE -> EXECUTE ON LAPTOP!
         if (isAgentOnline()) {
-            sendEvent('stdout', `[⚡ EXECUTING ON PHYSICAL LAPTOP (${connectedAgent.hostname}) via KotuKoleAgent.exe]\n`);
+            sendEvent('stdout', `[⚡ EXECUTING ON PHYSICAL LAPTOP (${connectedAgent.hostname}) via K-Term Agent]\n`);
             
             const cmdId = crypto.randomBytes(8).toString('hex');
             const timer = setTimeout(() => {
@@ -500,7 +500,7 @@ const server = http.createServer((req, res) => {
         }
 
         // FALLBACK: NO LAPTOP AGENT CONNECTED -> EXECUTE ON VPS
-        sendEvent('stdout', `[Notice: Laptop Agent not running. Executing on Cloud VPS (${os.hostname()})]\n[Tip: Run KotuKoleAgent.exe (8KB) on your laptop to execute directly on your physical laptop!]\n\n`);
+        sendEvent('stdout', `[Notice: Laptop Agent not running. Executing on Cloud VPS (${os.hostname()})]\n[Tip: Run K-Term Agent on your laptop to execute directly on your physical laptop!]\n\n`);
 
         const currentDir = process.env.HOME || '/home/dinujaya';
         const child = spawn(cmd, {
@@ -606,6 +606,6 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, '127.0.0.1', () => {
-    console.log(`[KotuKole Lap Terminal] running on http://127.0.0.1:${PORT}`);
-    console.log(`[KotuKole Lap Terminal] Password: ${ACCESS_PASSWORD}`);
+    console.log(`[K-Term Lap Terminal] running on http://127.0.0.1:${PORT}`);
+    console.log(`[K-Term Lap Terminal] Password: ${ACCESS_PASSWORD}`);
 });

