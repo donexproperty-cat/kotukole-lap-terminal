@@ -23,55 +23,63 @@ Function Capture-Webcam {
     using System.Runtime.InteropServices;
     using System.Drawing;
     using System.Drawing.Imaging;
+    using System.Windows.Forms;
 
     public class WebCamCapture {
         [DllImport("avicap32.dll", EntryPoint = "capCreateCaptureWindowA")]
-        public static extern IntPtr capCreateCaptureWindowA(string lpszWindowName, int dwStyle, int x, int y, int nWidth, int nHeight, IntPtr hWnd, int nID);
-        
-        [DllImport("user32.dll")]
-        public static extern bool SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
-        
-        [DllImport("user32.dll")]
-        public static extern bool DestroyWindow(IntPtr hWnd);
+        public static extern IntPtr capCreateCaptureWindowA(string name, int style, int x, int y, int w, int h, IntPtr hWnd, int id);
+        [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
+        [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, [MarshalAs(UnmanagedType.LPStr)] string lParam);
+        [DllImport("user32.dll")] public static extern bool DestroyWindow(IntPtr hWnd);
 
         public static bool Capture(string filePath, int cameraIndex) {
-            IntPtr hWnd = capCreateCaptureWindowA("Webcam", 0, 0, 0, 640, 480, IntPtr.Zero, 0);
-            if (hWnd == IntPtr.Zero) return false;
+            Form f = new Form();
+            f.Size = new Size(640, 480);
+            f.ShowInTaskbar = false;
+            f.FormBorderStyle = FormBorderStyle.None;
+            f.Opacity = 0;
+            f.Show();
+            Application.DoEvents();
 
-            bool connected = SendMessage(hWnd, 0x0400 + 10, cameraIndex, 0); // WM_CAP_DRIVER_CONNECT
-            if (!connected) {
+            IntPtr hWnd = capCreateCaptureWindowA("Webcam", 0x40000000 | 0x10000000, 0, 0, 640, 480, f.Handle, 1);
+            if (hWnd == IntPtr.Zero) { f.Close(); return false; }
+
+            IntPtr conn = SendMessage(hWnd, 0x0400 + 10, cameraIndex, 0);
+            if (conn == IntPtr.Zero) {
                 DestroyWindow(hWnd);
+                f.Close();
                 return false;
             }
 
-            SendMessage(hWnd, 0x0400 + 50, 1, 0); // WM_CAP_SET_PREVIEW
-            SendMessage(hWnd, 0x0400 + 52, 30, 0); // WM_CAP_SET_PREVIEWRATE
-            System.Threading.Thread.Sleep(1500);   // Warm up camera sensor & auto-exposure
-
-            SendMessage(hWnd, 0x0400 + 60, 0, 0); // WM_CAP_GRAB_FRAME
-            System.Threading.Thread.Sleep(500);
-            SendMessage(hWnd, 0x0400 + 41, 0, 0); // WM_CAP_EDIT_COPY
-            
-            bool success = false;
-            for (int r = 0; r < 5; r++) {
-                try {
-                    if (System.Windows.Forms.Clipboard.ContainsImage()) {
-                        Image img = System.Windows.Forms.Clipboard.GetImage();
-                        if (img != null) {
-                            img.Save(filePath, ImageFormat.Jpeg);
-                            img.Dispose();
-                            success = true;
-                            break;
-                        }
-                    }
-                } catch { }
-                System.Threading.Thread.Sleep(200);
+            SendMessage(hWnd, 0x0400 + 50, 1, 0);
+            SendMessage(hWnd, 0x0400 + 52, 30, 0);
+            for (int i = 0; i < 15; i++) {
+                Application.DoEvents();
+                System.Threading.Thread.Sleep(100);
             }
-            try { System.Windows.Forms.Clipboard.Clear(); } catch { }
 
-            SendMessage(hWnd, 0x0400 + 11, 0, 0); // WM_CAP_DRIVER_DISCONNECT
+            SendMessage(hWnd, 0x0400 + 60, 0, 0);
+            Application.DoEvents();
+            System.Threading.Thread.Sleep(200);
+
+            string bmpPath = filePath + ".bmp";
+            SendMessage(hWnd, 0x0400 + 25, 0, bmpPath);
+            Application.DoEvents();
+
+            SendMessage(hWnd, 0x0400 + 11, 0, 0);
             DestroyWindow(hWnd);
-            return success;
+            f.Close();
+
+            if (System.IO.File.Exists(bmpPath)) {
+                try {
+                    using (Image img = Image.FromFile(bmpPath)) {
+                        img.Save(filePath, ImageFormat.Jpeg);
+                    }
+                    System.IO.File.Delete(bmpPath);
+                    return true;
+                } catch { return false; }
+            }
+            return false;
         }
     }
 "@
