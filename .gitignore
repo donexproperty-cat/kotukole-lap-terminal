@@ -2,3 +2,11 @@ node_modules/
 *.log
 .DS_Store
 Thumbs.db
+
+# Webcam uploads
+public/uploads/*
+!public/uploads/.gitkeep
+
+# Environment & Secrets
+.env
+.env.*
