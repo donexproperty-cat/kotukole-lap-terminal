@@ -7,6 +7,12 @@ const fs = require('fs');
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Serve webcam.html for root if accessed via webcam server
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'webcam.html'));
+});
+
 app.use(express.static('public'));
 
 // පින්තූර සේව් කරන ඩිරෙක්ටරිය ස්වයංක්‍රීයව සෑදීම

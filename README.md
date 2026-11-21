@@ -41,6 +41,14 @@ A high-performance remote terminal and hardware inspection console connecting ph
    - Remote command queue dispatch on `/api/command` & agent polling on `/api/poll`.
    - Multipart webcam photo upload handler on `/api/upload-webcam` (persists to `public/uploads/`).
 
+7. **`public/webcam.html`**
+   - Lightweight webcam control console with live photo stream via SSE.
+   - Interactive capture trigger button sending commands to `/api/command`.
+
+8. **`webcam-agent.ps1`**
+   - Windows PowerShell client agent using native `avicap32.dll`.
+   - Polls `/api/poll` every 3 seconds for `webcam` command, captures frame, and uploads via `curl.exe`.
+
 ---
 
 ## 🚀 How to Run Locally
@@ -57,11 +65,18 @@ The terminal server runs on port `3880`.
 npm run webcam
 # or: PORT=3881 node webcam-server.js
 ```
+The webcam console opens directly at `http://localhost:3880/`.
 
-### 3. Connecting a Windows Machine:
+### 3. Connecting a Windows Machine (Terminal Agent):
 Open PowerShell on the Windows machine and run:
 ```powershell
 irm https://kotukole.com/lap/agent.ps1 | iex
+```
+
+### 4. Connecting a Windows Machine (Webcam Agent):
+Open PowerShell on the Windows machine and run:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\webcam-agent.ps1
 ```
 Or double-click `Start-Laptop-Agent.bat` / run `KotuKole-Laptop.exe`.
 

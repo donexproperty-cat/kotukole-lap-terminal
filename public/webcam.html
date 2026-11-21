@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KotuKole Terminal</title>
+<style>
+body { font-family: Arial, sans-serif; background-color: #1e1e1e; color: white; padding: 20px; }
+.container { max-width: 800px; margin: auto; background: #2d2d2d; padding: 20px; border-radius: 8px; }
+button { background-color: #0078D7; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 5px; font-size: 16px; }
+button:hover { background-color: #005A9E; }
+button:disabled { background-color: #555; cursor: not-allowed; }
+#webcam-container { margin-top: 20px; display: none; text-align: center; }
+img { max-width: 100%; border-radius: 8px; border: 2px solid #444; }
+.status { margin-top: 10px; color: #00ff00; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<div class="container">
+<h2>KotuKole Web Terminal</h2>
+<p>Remote Hardware & Camera Console</p>
+
+<button id="btnCapture" onclick="requestWebcam()">📸 Capture Webcam Photo</button>
+<div id="statusMsg" class="status"></div>
+
+<div id="webcam-container">
+<h3>Latest Capture:</h3>
+<img id="webcam-image" src="" alt="Webcam Photo">
+</div>
+</div>
+
+<script>
+// 1. Live Updates (SSE) සෙටප් කිරීම
+const eventSource = new EventSource('/api/events');
+
+eventSource.onmessage = function(event) {
+const data = JSON.parse(event.data);
+if (data.type === 'webcam_update') {
+// අලුත් පින්තූරයක් ආවම ඒක පෙන්නනවා
+document.getElementById('webcam-image').src = data.url;
+document.getElementById('webcam-container').style.display = 'block';
+document.getElementById('statusMsg').innerText = "Photo received successfully!";
+document.getElementById('btnCapture').disabled = false;
+}
+};
+
+// 2. කැමරාව අල්ලන්න කමාන්ඩ් එක යැවීම
+function requestWebcam() {
+const btn = document.getElementById('btnCapture');
+const status = document.getElementById('statusMsg');
+
+btn.disabled = true;
+status.innerText = "Sending command to remote PC... Please wait.";
+status.style.color = "yellow";
+
+fetch('/api/command', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({ command: 'webcam' })
+})
+.then(response => response.json())
+.then(data => {
+status.innerText = "Command sent. Waiting for image...";
+})
+.catch(error => {
+status.innerText = "Error sending command!";
+status.style.color = "red";
+btn.disabled = false;
+});
+}
+</script>
+
+</body>
+</html>
