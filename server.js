@@ -587,6 +587,8 @@ const server = http.createServer((req, res) => {
         else if (ext === '.json') mime = 'application/json';
         else if (ext === '.png') mime = 'image/png';
         else if (ext === '.jpg' || ext === '.jpeg') mime = 'image/jpeg';
+        else if (ext === '.wav') mime = 'audio/wav';
+        else if (ext === '.mp3') mime = 'audio/mpeg';
         else if (ext === '.ps1') mime = 'text/plain; charset=utf-8';
         else if (ext === '.bat') mime = 'text/plain; charset=utf-8';
 
