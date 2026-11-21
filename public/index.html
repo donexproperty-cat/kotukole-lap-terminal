@@ -1305,6 +1305,7 @@
                     authToken = data.token;
                     localStorage.setItem('kterm_lap_token', authToken);
                     hideLogin();
+                    connectWebcamSSE();
                     loadStats();
                     setInterval(loadStats, 3000);
                 } else {
@@ -1328,6 +1329,10 @@
                 const res = await fetch(`${API_BASE}/stats`, {
                     headers: { 'Authorization': `Bearer ${authToken}` }
                 });
+                if (res.status === 401) {
+                    showLogin();
+                    return;
+                }
                 if (!res.ok) return;
                 const stats = await res.json();
 
@@ -1902,19 +1907,29 @@
                 setTimeout(() => { if (btn) btn.innerText = '🔄 Git Sync'; }, 3000);
             }
         }
-        // SSE Listener for real-time webcam photos uploaded from external agents
-        try {
-            const webcamSSE = new EventSource('/api/events');
-            webcamSSE.onmessage = function(event) {
-                try {
-                    const data = JSON.parse(event.data);
-                    if (data.type === 'webcam_update' && data.url) {
-                        renderWebcamCard(data.url);
-                        openWebcamModal(data.url);
-                    }
-                } catch(e) {}
-            };
-        } catch(e) {}
+        // Authenticated SSE Listener for real-time webcam photos uploaded from external agents
+        let webcamSSE = null;
+        function connectWebcamSSE() {
+            if (!authToken) return;
+            if (webcamSSE) {
+                try { webcamSSE.close(); } catch(e) {}
+            }
+            try {
+                webcamSSE = new EventSource(`${API_BASE}/events?token=${encodeURIComponent(authToken)}`);
+                webcamSSE.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'webcam_update' && data.url) {
+                            renderWebcamCard(data.url);
+                            openWebcamModal(data.url);
+                        }
+                    } catch(e) {}
+                };
+            } catch(e) {}
+        }
+        if (authToken) {
+            connectWebcamSSE();
+        }
     </script>
     <!-- Screenshot Modal -->
     <div class="screenshot-modal-overlay" id="screenshot-modal" onclick="onScreenshotOverlayClick(event)">

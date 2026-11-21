@@ -11,7 +11,7 @@ A high-performance remote administration console and hardware inspection dashboa
    - Reverse agent command dispatch & polling (`/api/agent/poll`, `/api/agent/result`, `/api/poll`).
    - Live Server-Sent Events (SSE) streaming for real-time terminal output, webcam broadcasts, and multimedia audio (`/api/events`, `/api/exec`).
    - Multipart webcam and audio uploads with automatic storage in `public/uploads/`.
-   - Protected with access authentication: `DINUJAYA` (configurable via `LAP_PASSWORD`).
+   - Protected with access authentication (configured securely in your private `.env` file via `LAP_PASSWORD`).
 
 2. **`public/index.html` (All-in-One Dashboard)**
    - Modern, responsive web terminal and hardware inspection console.

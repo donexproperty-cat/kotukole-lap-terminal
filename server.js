@@ -6,8 +6,107 @@ const path = require('path');
 const crypto = require('crypto');
 const multer = require('multer');
 
+// Securely load local .env without external dependencies
+function loadEnv() {
+    const envPath = path.join(__dirname, '.env');
+    if (fs.existsSync(envPath)) {
+        try {
+            const content = fs.readFileSync(envPath, 'utf8');
+            for (const line of content.split('\n')) {
+                const trimmed = line.trim();
+                if (!trimmed || trimmed.startsWith('#')) continue;
+                const eqIdx = trimmed.indexOf('=');
+                if (eqIdx > 0) {
+                    const key = trimmed.substring(0, eqIdx).trim();
+                    let val = trimmed.substring(eqIdx + 1).trim();
+                    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+                        val = val.slice(1, -1);
+                    }
+                    if (!process.env[key]) {
+                        process.env[key] = val;
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('[Security] Failed to read .env file:', e.message);
+        }
+    }
+}
+loadEnv();
+
 const PORT = process.env.PORT || 3880;
-const ACCESS_PASSWORD = process.env.LAP_PASSWORD || 'DINUJAYA';
+
+// Security: Resolve ACCESS_PASSWORD strictly from private environment or .env
+let ACCESS_PASSWORD = (process.env.LAP_PASSWORD || '').trim();
+if (!ACCESS_PASSWORD) {
+    const generated = crypto.randomBytes(12).toString('hex');
+    const envPath = path.join(__dirname, '.env');
+    try {
+        fs.writeFileSync(envPath, `# K-Term Security Configuration\n# Keep this private - never commit to Git!\nLAP_PASSWORD=${generated}\nPORT=3880\n`, { mode: 0o600 });
+        ACCESS_PASSWORD = generated;
+        process.env.LAP_PASSWORD = generated;
+        console.log('[Security] Auto-generated strong LAP_PASSWORD and saved to local .env (0600 mode)');
+    } catch (e) {
+        ACCESS_PASSWORD = generated;
+        process.env.LAP_PASSWORD = generated;
+    }
+}
+
+// IP & Brute Force Rate Limiting
+const loginAttempts = new Map(); // ip -> { count, firstAttempt, lockedUntil }
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_MS = 15 * 60 * 1000; // 15 minute lockout
+const WINDOW_MS = 10 * 60 * 1000;  // 10 minute attempt window
+
+function getClientIp(req) {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (forwarded) {
+        return forwarded.split(',')[0].trim();
+    }
+    return req.socket.remoteAddress || 'unknown';
+}
+
+function checkLoginRateLimit(ip) {
+    const record = loginAttempts.get(ip);
+    if (!record) return { allowed: true };
+    const now = Date.now();
+    if (record.lockedUntil && now < record.lockedUntil) {
+        const remainingMinutes = Math.ceil((record.lockedUntil - now) / 60000);
+        return {
+            allowed: false,
+            error: `ආරක්ෂක හේතු මත මෙම IP ලිපිනය විනාඩි ${remainingMinutes}කට තාවකාලිකව අවහිර කර ඇත (Too many failed attempts).`
+        };
+    }
+    if (now - record.firstAttempt > WINDOW_MS) {
+        loginAttempts.delete(ip);
+        return { allowed: true };
+    }
+    return { allowed: true };
+}
+
+function recordFailedLogin(ip) {
+    const now = Date.now();
+    const record = loginAttempts.get(ip) || { count: 0, firstAttempt: now, lockedUntil: null };
+    record.count += 1;
+    if (record.count >= MAX_FAILED_ATTEMPTS) {
+        record.lockedUntil = now + LOCKOUT_MS;
+        console.warn(`[SECURITY ALERT] IP ${ip} temporarily locked out after ${record.count} failed login attempts.`);
+    }
+    loginAttempts.set(ip, record);
+}
+
+function resetLoginRateLimit(ip) {
+    loginAttempts.delete(ip);
+}
+
+// Constant-time password verification to prevent timing attacks
+function verifyPassword(inputPassword, actualPassword) {
+    if (typeof inputPassword !== 'string' || typeof actualPassword !== 'string') return false;
+    if (!actualPassword || actualPassword.length === 0) return false;
+    const inputHash = crypto.createHash('sha256').update(inputPassword).digest();
+    const actualHash = crypto.createHash('sha256').update(actualPassword).digest();
+    return crypto.timingSafeEqual(inputHash, actualHash);
+}
 
 // Upload directory for webcam captures
 const uploadDir = path.join(__dirname, 'public', 'uploads');
@@ -15,16 +114,33 @@ if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-// Multer storage for webcam photo uploads
+// Hardened Multer storage for webcam and audio uploads
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
         cb(null, uploadDir);
     },
     filename: function (req, file, cb) {
-        cb(null, 'webcam-' + Date.now() + path.extname(file.originalname || '.jpg'));
+        const ext = path.extname(file.originalname || '.jpg').toLowerCase();
+        const safeExt = ['.jpg', '.jpeg', '.png', '.wav'].includes(ext) ? ext : '.jpg';
+        const randomName = 'snap-' + crypto.randomBytes(12).toString('hex') + safeExt;
+        cb(null, randomName);
     }
 });
-const uploadWebcamMiddleware = multer({ storage: storage }).single('webcamPhoto');
+
+const uploadWebcamMiddleware = multer({
+    storage: storage,
+    limits: { fileSize: 15 * 1024 * 1024 }, // 15MB limit
+    fileFilter: function (req, file, cb) {
+        const ext = path.extname(file.originalname || '').toLowerCase();
+        const allowedExts = ['.jpg', '.jpeg', '.png', '.wav'];
+        const allowedMimes = ['image/jpeg', 'image/png', 'audio/wav', 'audio/x-wav', 'application/octet-stream'];
+        if (allowedExts.includes(ext) || allowedMimes.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Invalid file type: only JPG, PNG, and WAV files are allowed.'));
+        }
+    }
+}).single('webcamPhoto');
 
 // SSE clients for real-time webcam & dashboard updates
 let sseClients = [];
@@ -169,9 +285,12 @@ const server = http.createServer((req, res) => {
     const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
     const pathname = parsedUrl.pathname;
 
-    // CORS & Security headers
+    // CORS & Robust Security Headers
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Content-Security-Policy', "default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com data: blob:; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' ws: wss:;");
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -185,8 +304,14 @@ const server = http.createServer((req, res) => {
     // WEBCAM & SSE EVENT STREAM ENDPOINTS
     // ==========================================
 
-    // SSE: Live Webcam & System Event Stream
+    // SSE: Live Webcam & System Event Stream (Secured: requires valid session token)
     if (pathname === '/api/events') {
+        const streamToken = parsedUrl.searchParams.get('token') || (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
+        if (!isValidSession(streamToken)) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Unauthorized: Valid session token required for live stream.' }));
+        }
+
         res.writeHead(200, {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache, no-transform',
@@ -201,14 +326,23 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // Webcam Command Queue (POST /api/command)
+    // Webcam Command Queue (POST /api/command) (Secured: requires valid session token)
     if (req.method === 'POST' && pathname === '/api/command') {
+        const cmdToken = parsedUrl.searchParams.get('token') || (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
+        if (!isValidSession(cmdToken)) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Unauthorized: Valid session token required to queue commands.' }));
+        }
+
         let body = '';
-        req.on('data', chunk => body += chunk);
+        req.on('data', chunk => {
+            body += chunk;
+            if (body.length > 8192) req.destroy();
+        });
         req.on('end', () => {
             try {
                 const data = JSON.parse(body || '{}');
-                const command = data.command;
+                const command = (data.command || '').toString().trim();
                 if (command) {
                     agentCommandQueue.push(command);
                     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -399,19 +533,31 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // API: Login
+    // API: Login (Protected with IP Rate Limiting & Timing-Safe Hash Verification)
     if (req.method === 'POST' && pathname === '/api/login') {
+        const clientIp = getClientIp(req);
+        const rateCheck = checkLoginRateLimit(clientIp);
+        if (!rateCheck.allowed) {
+            res.writeHead(429, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ success: false, error: rateCheck.error }));
+        }
+
         let body = '';
-        req.on('data', chunk => body += chunk);
+        req.on('data', chunk => {
+            body += chunk;
+            if (body.length > 4096) req.destroy();
+        });
         req.on('end', () => {
             try {
                 const data = JSON.parse(body || '{}');
-                const userPass = (data.password || '').toString().trim();
-                if (userPass.toUpperCase() === 'DINUJAYA' || userPass.toLowerCase() === 'kterm123' || userPass === 'kotukole123') {
+                const userPass = (data.password || '').toString();
+                if (verifyPassword(userPass, ACCESS_PASSWORD)) {
+                    resetLoginRateLimit(clientIp);
                     const token = generateToken();
                     res.writeHead(200, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ success: true, token }));
                 } else {
+                    recordFailedLogin(clientIp);
                     res.writeHead(401, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ success: false, error: 'වැරදි Password එකක්! කරුණාකර නැවත උත්සාහ කරන්න.' }));
                 }
@@ -559,18 +705,30 @@ const server = http.createServer((req, res) => {
         }
     }
 
-    // Serve Uploaded Webcam Images (/uploads/webcam-xxx.jpg)
+    // Serve Uploaded Media (/uploads/snap-xxx.jpg)
     if (pathname.startsWith('/uploads/')) {
         const imgName = path.basename(pathname);
         const imgPath = path.join(uploadDir, imgName);
-        if (fs.existsSync(imgPath) && fs.statSync(imgPath).isFile()) {
-            const ext = path.extname(imgPath).toLowerCase();
-            const mime = ext === '.png' ? 'image/png' : 'image/jpeg';
+        const resolvedPath = path.resolve(imgPath);
+        const resolvedUpload = path.resolve(uploadDir);
+
+        if (!resolvedPath.startsWith(resolvedUpload + path.sep)) {
+            res.writeHead(403, { 'Content-Type': 'text/plain' });
+            return res.end('Forbidden: Access outside uploads directory');
+        }
+
+        if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isFile()) {
+            const ext = path.extname(resolvedPath).toLowerCase();
+            let mime = 'application/octet-stream';
+            if (ext === '.png') mime = 'image/png';
+            else if (ext === '.jpg' || ext === '.jpeg') mime = 'image/jpeg';
+            else if (ext === '.wav') mime = 'audio/wav';
+
             res.writeHead(200, {
                 'Content-Type': mime,
                 'Cache-Control': 'public, max-age=86400'
             });
-            fs.createReadStream(imgPath).pipe(res);
+            fs.createReadStream(resolvedPath).pipe(res);
             return;
         }
     }
@@ -578,8 +736,17 @@ const server = http.createServer((req, res) => {
     // Serve Downloads / Static Files (e.g. agent.ps1, webcam-agent.ps1, executables)
     const requestedFile = path.basename(pathname);
     const staticFilePath = path.join(__dirname, 'public', requestedFile);
-    if (fs.existsSync(staticFilePath) && fs.statSync(staticFilePath).isFile()) {
-        const ext = path.extname(staticFilePath).toLowerCase();
+    const resolvedStaticPath = path.resolve(staticFilePath);
+    const resolvedPublicDir = path.resolve(__dirname, 'public');
+
+    // Strict path traversal boundary verification
+    if (!resolvedStaticPath.startsWith(resolvedPublicDir + path.sep) && resolvedStaticPath !== resolvedPublicDir) {
+        res.writeHead(403, { 'Content-Type': 'text/plain' });
+        return res.end('Forbidden: Access outside public directory');
+    }
+
+    if (fs.existsSync(resolvedStaticPath) && fs.statSync(resolvedStaticPath).isFile()) {
+        const ext = path.extname(resolvedStaticPath).toLowerCase();
         let mime = 'application/octet-stream';
         if (ext === '.html') mime = 'text/html; charset=utf-8';
         else if (ext === '.js') mime = 'application/javascript';
@@ -597,7 +764,7 @@ const server = http.createServer((req, res) => {
             'Content-Disposition': (ext === '.exe' || ext === '.zip') ? `attachment; filename="${requestedFile}"` : 'inline',
             'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=3600'
         });
-        fs.createReadStream(staticFilePath).pipe(res);
+        fs.createReadStream(resolvedStaticPath).pipe(res);
         return;
     }
 
@@ -607,5 +774,5 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, '127.0.0.1', () => {
     console.log(`[K-Term Lap Terminal] running on http://127.0.0.1:${PORT}`);
-    console.log(`[K-Term Lap Terminal] Password: ${ACCESS_PASSWORD}`);
+    console.log(`[K-Term Security] Password authentication active (configured via .env / environment).`);
 });

@@ -31,43 +31,98 @@ img { max-width: 100%; border-radius: 8px; border: 2px solid #444; }
 </div>
 
 <script>
-// 1. Live Updates (SSE) සෙටප් කිරීම
-const eventSource = new EventSource('/api/events');
+let authToken = localStorage.getItem('kterm_lap_token') || '';
 
-eventSource.onmessage = function(event) {
-const data = JSON.parse(event.data);
-if (data.type === 'webcam_update') {
-// අලුත් පින්තූරයක් ආවම ඒක පෙන්නනවා
-document.getElementById('webcam-image').src = data.url;
-document.getElementById('webcam-container').style.display = 'block';
-document.getElementById('statusMsg').innerText = "Photo received successfully!";
-document.getElementById('btnCapture').disabled = false;
+async function checkAuth() {
+    if (!authToken) {
+        const pwd = prompt('Access Password එක ඇතුළත් කරන්න:');
+        if (!pwd) {
+            document.body.innerHTML = '<div style="max-width:500px; margin:50px auto; background:#222; padding:30px; border-radius:8px; text-align:center;"><h2 style="color:#ef4444;">🔒 Access Denied</h2><p>Password is required to access webcam console.</p><button onclick="location.reload()" style="background:#0078D7; color:#fff; border:none; padding:10px 20px; border-radius:5px; cursor:pointer;">Retry Login</button></div>';
+            return;
+        }
+        try {
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: pwd })
+            });
+            const data = await res.json();
+            if (data.success && data.token) {
+                authToken = data.token;
+                localStorage.setItem('kterm_lap_token', authToken);
+                initSSE();
+            } else {
+                alert(data.error || 'Password වැරදියි!');
+                location.reload();
+            }
+        } catch(e) {
+            alert('Connection error. Please retry.');
+        }
+    } else {
+        initSSE();
+    }
 }
-};
+
+let eventSource = null;
+function initSSE() {
+    if (!authToken) return;
+    if (eventSource) {
+        try { eventSource.close(); } catch(e) {}
+    }
+    eventSource = new EventSource('/api/events?token=' + encodeURIComponent(authToken));
+    eventSource.onmessage = function(event) {
+        try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'webcam_update') {
+                document.getElementById('webcam-image').src = data.url;
+                document.getElementById('webcam-container').style.display = 'block';
+                document.getElementById('statusMsg').innerText = "Photo received successfully!";
+                document.getElementById('btnCapture').disabled = false;
+            }
+        } catch(e) {}
+    };
+    eventSource.onerror = function() {
+        // Token expired or invalid
+    };
+}
+
+checkAuth();
 
 // 2. කැමරාව අල්ලන්න කමාන්ඩ් එක යැවීම
 function requestWebcam() {
-const btn = document.getElementById('btnCapture');
-const status = document.getElementById('statusMsg');
+    if (!authToken) { checkAuth(); return; }
+    const btn = document.getElementById('btnCapture');
+    const status = document.getElementById('statusMsg');
 
-btn.disabled = true;
-status.innerText = "Sending command to remote PC... Please wait.";
-status.style.color = "yellow";
+    btn.disabled = true;
+    status.innerText = "Sending command to remote PC... Please wait.";
+    status.style.color = "yellow";
 
-fetch('/api/command', {
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ command: 'webcam' })
-})
-.then(response => response.json())
-.then(data => {
-status.innerText = "Command sent. Waiting for image...";
-})
-.catch(error => {
-status.innerText = "Error sending command!";
-status.style.color = "red";
-btn.disabled = false;
-});
+    fetch('/api/command?token=' + encodeURIComponent(authToken), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+        },
+        body: JSON.stringify({ command: 'webcam' })
+    })
+    .then(response => {
+        if (response.status === 401) {
+            localStorage.removeItem('kterm_lap_token');
+            authToken = '';
+            checkAuth();
+            throw new Error('Unauthorized');
+        }
+        return response.json();
+    })
+    .then(data => {
+        status.innerText = "Command sent. Waiting for image...";
+    })
+    .catch(error => {
+        status.innerText = error.message === 'Unauthorized' ? "Authentication failed!" : "Error sending command!";
+        status.style.color = "red";
+        btn.disabled = false;
+    });
 }
 </script>
 
