@@ -108,6 +108,15 @@ function requestWebcam() {
     status.innerText = "Sending command to remote PC... Please wait.";
     status.style.color = "yellow";
 
+    clearTimeout(window.webcamTimeout);
+    window.webcamTimeout = setTimeout(() => {
+        if (btn.disabled) {
+            btn.disabled = false;
+            status.innerText = "No response from webcam. Please check if camera is connected and agent is running.";
+            status.style.color = "orange";
+        }
+    }, 15000);
+
     fetch(`${API_BASE}/command?token=` + encodeURIComponent(authToken), {
         method: 'POST',
         headers: {
@@ -129,6 +138,7 @@ function requestWebcam() {
         status.innerText = "Command sent. Waiting for image...";
     })
     .catch(error => {
+        clearTimeout(window.webcamTimeout);
         status.innerText = error.message === 'Unauthorized' ? "Authentication failed!" : "Error sending command!";
         status.style.color = "red";
         btn.disabled = false;

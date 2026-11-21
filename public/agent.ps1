@@ -102,8 +102,39 @@ while ($true) {
 
             $output = ""
             try {
-                $output = cmd.exe /c $cmd 2>&1 | Out-String
-                if (-not $output) { $output = "(Command completed successfully with no output)" }
+                $procInfo = New-Object System.Diagnostics.ProcessStartInfo
+                if ($cmd -match '^\s*powershell(?:\.exe)?\s+(-.*)$') {
+                    $procInfo.FileName = "powershell.exe"
+                    $procInfo.Arguments = $Matches[1]
+                } elseif ($cmd -match '^\s*(?:\$|Get-|Set-|New-|Remove-|Start-|Stop-|Invoke-)') {
+                    $procInfo.FileName = "powershell.exe"
+                    $procInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"$($cmd.Replace('"', '\"'))`""
+                } else {
+                    $procInfo.FileName = "cmd.exe"
+                    $procInfo.Arguments = "/c " + $cmd
+                }
+                $procInfo.RedirectStandardOutput = $true
+                $procInfo.RedirectStandardError = $true
+                $procInfo.UseShellExecute = $false
+                $procInfo.CreateNoWindow = $true
+
+                $proc = [System.Diagnostics.Process]::Start($procInfo)
+                $outTask = $proc.StandardOutput.ReadToEndAsync()
+                $errTask = $proc.StandardError.ReadToEndAsync()
+
+                if ($proc.WaitForExit(25000)) {
+                    $stdout = $outTask.Result
+                    $stderr = $errTask.Result
+                    $output = $stdout
+                    if ($stderr) {
+                        if ($output) { $output += "`n" }
+                        $output += $stderr
+                    }
+                } else {
+                    try { $proc.Kill() } catch {}
+                    $output = "[Execution Timeout: Process exceeded 25 seconds and was safely terminated]"
+                }
+                if (-not $output.Trim()) { $output = "(Command completed successfully with no output)" }
             } catch {
                 $output = "[Execution Error]: " + $_.Exception.Message
             }
