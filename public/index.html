@@ -349,7 +349,70 @@
             background: var(--bg-surface);
             border: 1px solid var(--border);
             border-radius: 12px;
-            padding: 8px 12px;
+            padding: 10px 14px;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 10px;
+        }
+
+        .actions-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+        }
+
+        .cat-tabs {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .cat-tab {
+            background: transparent;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            color: #94a3b8;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.74rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .cat-tab:hover {
+            color: #e2e8f0;
+            border-color: rgba(56, 189, 248, 0.45);
+        }
+
+        .cat-tab.active {
+            background: rgba(56, 189, 248, 0.15);
+            border-color: rgba(56, 189, 248, 0.6);
+            color: #38bdf8;
+        }
+
+        .tool-filter-input {
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            color: #e2e8f0;
+            padding: 5px 10px;
+            border-radius: 8px;
+            font-size: 0.76rem;
+            min-width: 190px;
+            outline: none;
+            transition: border-color 0.15s ease;
+        }
+
+        .tool-filter-input:focus {
+            border-color: #38bdf8;
+        }
+
+        .actions-row-wrap {
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -1113,7 +1176,19 @@
 
         <!-- Quick Action Bar -->
         <div class="actions-panel">
-            <div class="actions-group">
+            <div class="actions-toolbar">
+                <div class="cat-tabs">
+                    <span class="action-tag">⚡ Tools:</span>
+                    <button class="cat-tab active" onclick="filterToolsByCat('all', this)">All</button>
+                    <button class="cat-tab" onclick="filterToolsByCat('media', this)">📸 Media</button>
+                    <button class="cat-tab" onclick="filterToolsByCat('system', this)">🖥️ System</button>
+                    <button class="cat-tab" onclick="filterToolsByCat('network', this)">🌐 Network</button>
+                    <button class="cat-tab" onclick="filterToolsByCat('admin', this)">🛠️ Admin</button>
+                </div>
+                <input id="tool-filter-input" type="text" class="tool-filter-input" placeholder="🔍 Filter tools... (Ctrl+K)" oninput="filterToolsByText(this.value)">
+            </div>
+            <div class="actions-row-wrap">
+            <div class="actions-group" id="main-actions-group">
                 <span class="action-tag">⚡ Quick Run:</span>
                 <button class="btn-chip" onclick="runQuickAction('specs')" title="Full hardware specifications">
                     💻 Specs
@@ -1220,6 +1295,7 @@
                 <button class="btn-chip btn-chip-red" onclick="clearTerminal()" title="Clear terminal screen">
                     🧹 Clear
                 </button>
+            </div>
             </div>
         </div>
 
@@ -2906,6 +2982,49 @@ Write-Output "Cleanup Complete! Freed: $freedMB MB (DNS Cache Flushed)"`;
             appendOutput('🔊 [Ring / Find] Playing alert chime on laptop speaker...', 'out');
             await execPsQuiet(ps);
         }
+
+        // 18. QUICK TOOLS CATEGORY & SEARCH FILTER (Ctrl+K)
+        let activeToolCat = 'all';
+        function getToolCategory(text) {
+            const t = (text || '').toLowerCase();
+            if (t.includes('screenshot') || t.includes('webcam') || t.includes('mic') || t.includes('monitor') || t.includes('speak') || t.includes('ring')) return 'media';
+            if (t.includes('wi-fi') || t.includes('signal') || t.includes('public ip') || t.includes('network') || t.includes('ports')) return 'network';
+            if (t.includes('specs') || t.includes('ram') || t.includes('disks') || t.includes('apps') || t.includes('processes') || t.includes('services') || t.includes('software') || t.includes('cleaner')) return 'system';
+            return 'admin';
+        }
+
+        function applyToolFilters() {
+            const group = document.getElementById('main-actions-group');
+            const q = ((document.getElementById('tool-filter-input') || {}).value || '').trim().toLowerCase();
+            if (!group) return;
+            Array.from(group.children).forEach(el => {
+                if (el.tagName === 'SPAN' && el.classList.contains('action-tag')) return;
+                const txt = (el.innerText || el.title || '').toLowerCase();
+                const cat = getToolCategory(txt);
+                const matchCat = (activeToolCat === 'all' || cat === activeToolCat);
+                const matchTxt = (!q || txt.includes(q));
+                el.style.display = (matchCat && matchTxt) ? '' : 'none';
+            });
+        }
+
+        function filterToolsByCat(cat, btnEl) {
+            activeToolCat = cat;
+            document.querySelectorAll('.cat-tab').forEach(b => b.classList.remove('active'));
+            if (btnEl) btnEl.classList.add('active');
+            applyToolFilters();
+        }
+
+        function filterToolsByText() {
+            applyToolFilters();
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+                e.preventDefault();
+                const inp = document.getElementById('tool-filter-input');
+                if (inp) inp.focus();
+            }
+        });
     </script>
 </body>
 </html>
