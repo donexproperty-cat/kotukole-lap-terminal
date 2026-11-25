@@ -1110,6 +1110,12 @@
                 🔄 Git Sync
             </button>
             <select id="device-select" onchange="onDeviceChange()" title="Select Target Laptop" style="display:none; background: rgba(15, 23, 42, 0.9); color: #e2e8f0; border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 8px; padding: 5px 10px; font-size: 0.78rem; outline: none; cursor: pointer;"></select>
+            <button class="btn-header" id="btn-theme-toggle" onclick="cycleTheme()" title="Switch UI Theme (Dark / Midnight / Matrix)">
+                🎨 Theme
+            </button>
+            <button class="btn-header" id="btn-viewonly-toggle" onclick="toggleViewOnly()" title="Toggle Read-Only Monitoring Mode">
+                👁️ View Only
+            </button>
             <button class="btn-header" onclick="toggleAgentGuide()" title="Agent Setup Guide">
                 ⚙️ Setup
             </button>
@@ -1323,6 +1329,15 @@
                 <button class="btn-chip" onclick="ringLaptopAlarm()" title="Play loud alert chime on laptop speaker" style="border-color: rgba(236, 72, 153, 0.4); color: #f472b6;">
                     🔊 Ring / Find
                 </button>
+                <button class="btn-chip" onclick="openStartupAppsModal()" title="View & manage Windows Startup Apps & Tasks" style="border-color: rgba(52, 211, 153, 0.4); color: #34d399;">
+                    🚀 Startup Apps
+                </button>
+                <button class="btn-chip" onclick="openTimelineModal()" title="Auto-capture & view Screenshot Timeline" style="border-color: rgba(168, 85, 247, 0.4); color: #c084fc;">
+                    🕒 Timeline
+                </button>
+                <button class="btn-chip" onclick="sendWolDialog()" title="Send Wake-on-LAN Magic Packet to another PC" style="border-color: rgba(250, 204, 21, 0.4); color: #facc15;">
+                    ⚡ Wake LAN
+                </button>
             </div>
             <div class="actions-group">
                 <button class="btn-chip btn-chip-red" onclick="clearTerminal()" title="Clear terminal screen">
@@ -1345,6 +1360,9 @@
                     Session: <span id="term-user-host">Connecting...</span>
                 </div>
                 <div class="terminal-toolbar">
+                    <button class="btn-term-tool" id="btn-split-live" onclick="toggleSplitLive()" title="Show Live Screen preview next to terminal">
+                        🖥️ Split Live
+                    </button>
                     <button class="btn-term-tool" id="btn-order-toggle" onclick="toggleOutputOrder()" title="Newest command output at top">
                         ⬆️ Newest Top
                     </button>
@@ -1358,6 +1376,13 @@
             </div>
 
             <!-- Terminal Output Area -->
+            <div id="split-live-pane" style="display:none; background:#020617; border-bottom:1px solid rgba(56,189,248,0.25); padding:10px; text-align:center;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:0.75rem;color:#94a3b8;">
+                    <span>🔴 Live Split Screen Preview (auto-refreshes every 4s)</span>
+                    <button class="btn-term-tool" onclick="toggleSplitLive()">✕ Close</button>
+                </div>
+                <img id="split-live-img" src="" alt="Waiting for screen..." style="max-height:240px;max-width:100%;border-radius:6px;border:1px solid #1e293b;" />
+            </div>
             <div class="terminal-body" id="term-output" onclick="focusInput()">
                 <div style="color: #64748b;">[K-Term v2.0 Ready]</div>
                 <div style="color: #64748b;">Type any command or click the Quick Action chips above.</div>
@@ -2146,6 +2171,10 @@ if ($rec -and (Test-Path $wavPath)) {
 
         // Submit Command
         function submitCommand() {
+            if (typeof isViewOnlyMode !== 'undefined' && isViewOnlyMode) {
+                alert('👁️ View-Only Mode is active! Disable View Only in the header to run commands.');
+                return;
+            }
             if (isRunningCommand) return;
             const cmd = cmdInput.value.trim();
             if (!cmd) return;
@@ -3084,6 +3113,162 @@ Write-Output "Cleanup Complete! Freed: $freedMB MB (DNS Cache Flushed)"`;
                 if (inp) inp.focus();
             }
         });
+
+        // 19. THEME SWITCHER (Dark / Midnight / Matrix)
+        const ktermThemes = [
+            { name: 'Dark', bg: '#06090e', surface: '#0d131d', card: '#111827', cyan: '#38bdf8' },
+            { name: 'Midnight', bg: '#030712', surface: '#0f172a', card: '#1e1b4b', cyan: '#818cf8' },
+            { name: 'Matrix', bg: '#020b05', surface: '#06170c', card: '#0a2413', cyan: '#22c55e' }
+        ];
+        let themeIdx = parseInt(localStorage.getItem('kterm_theme_idx') || '0', 10) % ktermThemes.length;
+        function applyKtermTheme(idx) {
+            const t = ktermThemes[idx] || ktermThemes[0];
+            document.documentElement.style.setProperty('--bg-base', t.bg);
+            document.documentElement.style.setProperty('--bg-surface', t.surface);
+            document.documentElement.style.setProperty('--bg-card', t.card);
+            document.documentElement.style.setProperty('--accent-cyan', t.cyan);
+            const btn = document.getElementById('btn-theme-toggle');
+            if (btn) btn.innerText = `🎨 ${t.name}`;
+        }
+        function cycleTheme() {
+            themeIdx = (themeIdx + 1) % ktermThemes.length;
+            localStorage.setItem('kterm_theme_idx', String(themeIdx));
+            applyKtermTheme(themeIdx);
+        }
+        applyKtermTheme(themeIdx);
+
+        // 20. VIEW-ONLY MODE & 15-MIN IDLE AUTO-LOCK
+        let isViewOnlyMode = false;
+        function toggleViewOnly() {
+            isViewOnlyMode = !isViewOnlyMode;
+            const btn = document.getElementById('btn-viewonly-toggle');
+            if (btn) {
+                btn.innerText = isViewOnlyMode ? '🔒 View Only ON' : '👁️ View Only';
+                btn.style.borderColor = isViewOnlyMode ? '#f59e0b' : '';
+                btn.style.color = isViewOnlyMode ? '#fbbf24' : '';
+            }
+            if (cmdInput) cmdInput.disabled = isViewOnlyMode;
+            if (submitBtn) submitBtn.disabled = isViewOnlyMode;
+        }
+
+        let idleTimer = null;
+        function resetIdleLockTimer() {
+            clearTimeout(idleTimer);
+            if (!authToken) return;
+            idleTimer = setTimeout(() => {
+                if (authToken) {
+                    authToken = '';
+                    localStorage.removeItem('kterm_lap_token');
+                    showLogin();
+                }
+            }, 15 * 60 * 1000);
+        }
+        ['mousemove', 'keydown', 'click'].forEach(ev => document.addEventListener(ev, resetIdleLockTimer, { passive: true }));
+        resetIdleLockTimer();
+
+        // 21. SPLIT-VIEW LIVE SCREEN PREVIEW
+        let splitLiveTimer = null;
+        async function refreshSplitLiveFrame() {
+            if (!isLaptopOnline) return;
+            const ps = `Add-Type -AssemblyName System.Drawing,System.Windows.Forms
+$b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+$bmp = New-Object Drawing.Bitmap $b.Width, $b.Height
+$g = [Drawing.Graphics]::FromImage($bmp)
+$g.CopyFromScreen($b.Location, [Drawing.Point]::Empty, $b.Size)
+$c = [Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.MimeType -eq 'image/jpeg' }
+$p = New-Object Drawing.Imaging.EncoderParameters(1); $p.Param[0] = New-Object Drawing.Imaging.EncoderParameter([Drawing.Imaging.Encoder]::Quality, [long]45)
+$ms = New-Object IO.MemoryStream; $bmp.Save($ms, $c, $p)
+$b64 = [Convert]::ToBase64String($ms.ToArray())
+$g.Dispose(); $bmp.Dispose(); $ms.Dispose()
+Write-Output ("data:image/jpeg;base64," + $b64)`;
+            const res = await execPsQuiet(ps);
+            const img = document.getElementById('split-live-img');
+            if (img && res.out && res.out.startsWith('data:image/jpeg;base64,')) {
+                img.src = res.out;
+                addTimelineFrame(res.out);
+            }
+        }
+        function toggleSplitLive() {
+            const pane = document.getElementById('split-live-pane');
+            const btn = document.getElementById('btn-split-live');
+            if (splitLiveTimer) {
+                clearInterval(splitLiveTimer);
+                splitLiveTimer = null;
+                if (pane) pane.style.display = 'none';
+                if (btn) { btn.innerText = '🖥️ Split Live'; btn.style.color = ''; }
+            } else {
+                if (!isLaptopOnline) { alert('Split Live requires Physical Laptop Agent.'); return; }
+                if (pane) pane.style.display = 'block';
+                if (btn) { btn.innerText = '⏹️ Stop Split'; btn.style.color = '#f87171'; }
+                refreshSplitLiveFrame();
+                splitLiveTimer = setInterval(refreshSplitLiveFrame, 4000);
+            }
+        }
+
+        // 22. STARTUP APPS & SCHEDULED TASKS MANAGER
+        async function openStartupAppsModal() {
+            if (!isLaptopOnline) { alert('Startup Apps Manager requires Physical Laptop Agent.'); return; }
+            openFeatureModal('🚀', 'Windows Startup Apps & Tasks', 'Registry Run Entries', '<div style="color:#94a3b8;">⏳ Scanning startup entries...</div>');
+            const ps = `$list = @()
+foreach ($path in @('HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run','HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run')) {
+  $p = Get-ItemProperty $path -ErrorAction SilentlyContinue
+  if ($p) {
+    $p.PSObject.Properties | Where-Object { $_.Name -notlike 'PS*' } | ForEach-Object {
+      $list += [PSCustomObject]@{ Scope = ($path -split ':')[0]; Name = $_.Name; Cmd = [string]$_.Value }
+    }
+  }
+}
+$list | ConvertTo-Json -Compress`;
+            const res = await execPsQuiet(ps);
+            let items = [];
+            try { items = JSON.parse(res.out || '[]'); if (!Array.isArray(items)) items = [items]; } catch (e) {}
+            const rows = items.map(it => `<tr style="border-bottom:1px solid rgba(148,163,184,0.12);"><td style="padding:6px;color:#38bdf8;">${escapeHtml(it.Scope || '')}</td><td style="padding:6px;color:#e2e8f0;font-weight:600;">${escapeHtml(it.Name || '')}</td><td style="padding:6px;color:#94a3b8;font-family:monospace;font-size:0.74rem;word-break:break-all;">${escapeHtml(it.Cmd || '')}</td></tr>`).join('');
+            document.getElementById('fm-modal-body').innerHTML = `<div style="max-height:56vh;overflow-y:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="text-align:left;color:#94a3b8;border-bottom:1px solid #334155;"><th style="padding:6px;">Scope</th><th style="padding:6px;">Name</th><th style="padding:6px;">Command</th></tr></thead><tbody>${rows || '<tr><td colspan="3">No startup entries</td></tr>'}</tbody></table></div>`;
+        }
+
+        // 23. SCHEDULED SNAPSHOTS & TIMELINE
+        const timelineFrames = [];
+        let timelineTimer = null;
+        function addTimelineFrame(dataUrl) {
+            timelineFrames.unshift({ time: new Date().toLocaleTimeString(), url: dataUrl });
+            if (timelineFrames.length > 24) timelineFrames.pop();
+        }
+        function openTimelineModal() {
+            const cards = timelineFrames.map(f => `<div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:6px;"><img src="${f.url}" style="width:100%;border-radius:4px;cursor:pointer;" onclick="openScreenshotModal('${f.url}')" /><div style="font-size:0.72rem;color:#94a3b8;margin-top:4px;">${f.time}</div></div>`).join('');
+            openFeatureModal('🕒', 'Activity Snapshot Timeline', 'Auto-captured screen history', `
+                <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+                    <button class="btn-chip" onclick="toggleTimelineAuto()">${timelineTimer ? '⏹️ Stop Auto-Capture (60s)' : '▶️ Start Auto-Capture (60s)'}</button>
+                    <button class="btn-chip" onclick="refreshSplitLiveFrame().then(openTimelineModal)">📸 Capture Now</button>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;">${cards || '<div style="color:#64748b;">No snapshots in timeline yet. Click Capture Now or Start Auto-Capture.</div>'}</div>`);
+        }
+        function toggleTimelineAuto() {
+            if (timelineTimer) { clearInterval(timelineTimer); timelineTimer = null; }
+            else {
+                if (!isLaptopOnline) { alert('Auto-Capture requires Physical Laptop Agent.'); return; }
+                refreshSplitLiveFrame();
+                timelineTimer = setInterval(refreshSplitLiveFrame, 60000);
+            }
+            openTimelineModal();
+        }
+
+        // 24. WAKE-ON-LAN (WoL) MAGIC PACKET SENDER
+        async function sendWolDialog() {
+            if (!isLaptopOnline) { alert('Wake-on-LAN requires Physical Laptop Agent on the same LAN.'); return; }
+            const mac = prompt('Enter target PC MAC Address (e.g. AA:BB:CC:DD:EE:FF):', '');
+            if (!mac) return;
+            const cleanMac = mac.replace(/[^0-9A-Fa-f]/g, '');
+            if (cleanMac.length !== 12) { alert('Invalid MAC address format.'); return; }
+            const ps = `$mac = "${cleanMac}"
+$bytes = [byte[]](,0xFF * 6) + (($mac -split '(.{2})' | Where-Object { $_ } | ForEach-Object { [Convert]::ToByte($_, 16) }) * 16)
+$udp = New-Object System.Net.Sockets.UdpClient
+$udp.Connect([System.Net.IPAddress]::Broadcast, 9)
+$udp.Send($bytes, $bytes.Length) | Out-Null
+$udp.Close()
+Write-Output "WoL Magic Packet sent to $mac"`;
+            const res = await execPsQuiet(ps);
+            appendOutput(`⚡ [Wake-on-LAN] ${res.out || 'Packet sent'}`, 'out');
+        }
     </script>
 </body>
 </html>
