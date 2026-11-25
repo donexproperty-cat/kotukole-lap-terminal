@@ -1,6 +1,6 @@
-# K-Term Laptop Agent (PowerShell Edition v1.4.2)
+# K-Term Laptop Agent (PowerShell Edition v1.4.3)
 # Compatible with both `irm ... | iex` and direct `.ps1` execution
-$AgentVersion = "1.4.2"
+$AgentVersion = "1.4.3"
 $Uninstall  = ($args -contains '-Uninstall')  -or ($env:KTERM_ACTION -eq 'uninstall')
 $Status     = ($args -contains '-Status')     -or ($env:KTERM_ACTION -eq 'status')
 $Logs       = ($args -contains '-Logs')       -or ($env:KTERM_ACTION -eq 'logs')
@@ -95,8 +95,9 @@ if ($gpuName) { Write-Host "[*] Graphics (GPU)            : $gpuName" }
 Write-Host "[*] CPU Cores                 : $cores"
 Write-Host "[*] Operating OS              : $osName"
 
-# Ensure local copy & Windows Logon Auto-Startup (unlimited runtime, survives hours offline)
+# Ensure local copy & Windows Logon Auto-Startup (uses wscript.exe .vbs so Windows 11 Terminal never pops up)
 $localAgentPath = Join-Path $configDir "agent.ps1"
+$vbsPath = Join-Path $configDir "run-hidden.vbs"
 if (-not $env:KTERM_NO_STARTUP) {
     try {
         if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
@@ -109,40 +110,37 @@ if (-not $env:KTERM_NO_STARTUP) {
             Invoke-WebRequest -Uri "$serverUrl/agent.ps1" -OutFile $localAgentPath -UseBasicParsing -ErrorAction SilentlyContinue
         }
 
-        $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-        $regRunPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-        $existingRun = (Get-ItemProperty -Path $regRunPath -Name $taskName -ErrorAction SilentlyContinue).$taskName
+        $vbsCode = "CreateObject(`"Wscript.Shell`").Run `"powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"`"$localAgentPath`"`"`", 0, False"
+        [System.IO.File]::WriteAllText($vbsPath, $vbsCode, [System.Text.Encoding]::ASCII)
 
-        if (-not $existingTask -and -not $existingRun -and (Test-Path $localAgentPath)) {
+        $regRunPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+        if (Test-Path $localAgentPath) {
             try {
-                $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$localAgentPath`""
+                $action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"$vbsPath`""
                 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
                 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 1)
                 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description "K-Term Physical Laptop Agent" -Force -ErrorAction Stop | Out-Null
-                Write-Host "[+] Auto-Startup              : ENABLED (Scheduled Task '$taskName')" -ForegroundColor Green
-                Write-AgentLog "Registered Scheduled Task '$taskName' -> $localAgentPath"
+                Write-Host "[+] Auto-Startup              : ENABLED (Hidden Background Task '$taskName')" -ForegroundColor Green
+                Write-AgentLog "Registered/Updated Hidden Scheduled Task '$taskName' -> $vbsPath"
             } catch {
                 try {
-                    $runCmd = "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$localAgentPath`""
-                    Set-ItemProperty -Path $regRunPath -Name $taskName -Value $runCmd -Force -ErrorAction Stop
-                    Write-Host "[+] Auto-Startup              : ENABLED (User Logon Startup '$taskName')" -ForegroundColor Green
-                    Write-AgentLog "Registered HKCU Run '$taskName' -> $localAgentPath"
+                    Set-ItemProperty -Path $regRunPath -Name $taskName -Value "wscript.exe `"$vbsPath`"" -Force -ErrorAction Stop
+                    Write-Host "[+] Auto-Startup              : ENABLED (Hidden User Startup '$taskName')" -ForegroundColor Green
+                    Write-AgentLog "Registered/Updated HKCU Run '$taskName' -> $vbsPath"
                 } catch {
                     Write-Host "[!] Auto-Startup Setup        : Skipped ($($_.Exception.Message))" -ForegroundColor Yellow
                 }
             }
-        } elseif ($existingTask -or $existingRun) {
-            Write-Host "[+] Auto-Startup              : ALREADY ENABLED ('$taskName')" -ForegroundColor Green
         }
     } catch {
         Write-Host "[!] Auto-Startup Setup        : Skipped ($($_.Exception.Message))" -ForegroundColor Yellow
     }
 }
 
-# If launched interactively via `irm ... | iex` (no $PSCommandPath), hand off to hidden background process so user can close this window!
-if (-not $PSCommandPath -and -not $Foreground -and (Test-Path $localAgentPath)) {
+# If launched interactively via `irm ... | iex` (no $PSCommandPath), hand off to hidden wscript background process!
+if (-not $PSCommandPath -and -not $Foreground -and (Test-Path $vbsPath)) {
     try { $mutex.ReleaseMutex(); $mutex.Dispose() } catch {}
-    Start-Process "powershell.exe" -WindowStyle Hidden -ArgumentList "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$localAgentPath`""
+    Start-Process "wscript.exe" -ArgumentList "`"$vbsPath`""
     Write-Host "`n[+] Status: RUNNING IN BACKGROUND! You can safely close this PowerShell window." -ForegroundColor Green
     Write-Host "[+] Log File: $logPath`n" -ForegroundColor DarkGray
     return
