@@ -75,12 +75,12 @@ if (-not $env:KTERM_NO_STARTUP) {
         $taskName = "KTermLaptopAgent"
         $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
         if (-not $existingTask -and (Test-Path $localAgentPath)) {
-            $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$localAgentPath`""
+            $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$localAgentPath`""
             $trigger = New-ScheduledTaskTrigger -AtLogOn
             $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
             Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description "K-Term Physical Laptop Agent" -Force | Out-Null
-            Write-Host "[+] Auto-Startup              : ENABLED (Task '$taskName' at Windows Logon)" -ForegroundColor Green
-            Write-AgentLog "Registered Scheduled Task '$taskName' -> $localAgentPath"
+            Write-Host "[+] Auto-Startup              : ENABLED (Background Task '$taskName' at Windows Logon)" -ForegroundColor Green
+            Write-AgentLog "Registered Background Scheduled Task '$taskName' -> $localAgentPath"
         } elseif ($existingTask) {
             Write-Host "[+] Auto-Startup              : ALREADY ENABLED (Task '$taskName')" -ForegroundColor Green
         }
@@ -93,12 +93,15 @@ Write-Host "`n[+] Status: CONNECTED & LISTENING for commands from Server" -Foreg
 Write-Host "[+] Log File: $logPath`n" -ForegroundColor DarkGray
 Write-AgentLog "Agent v1.3.0 started -> $serverUrl ($deviceId)"
 
-# Sleep / Wake event handler
+# Sleep / Wake & Network Change event handlers (instant reconnect when Wi-Fi/Data turns on)
 try {
     Register-ObjectEvent -InputObject ([Microsoft.Win32.SystemEvents]) -EventName PowerModeChanged -Action {
         if ($EventArgs.Mode -eq 'Resume') {
             $script:backoffSec = 1
         }
+    } | Out-Null
+    Register-ObjectEvent -InputObject ([System.Net.NetworkInformation.NetworkChange]) -EventName NetworkAddressChanged -Action {
+        $script:backoffSec = 1
     } | Out-Null
 } catch {}
 
@@ -107,6 +110,11 @@ $currentWorkDir = (Get-Location).Path
 $script:backoffSec = 1
 
 while ($true) {
+    # Wait quietly if no network adapter/data is connected yet
+    while (-not ([System.Net.NetworkInformation.NetworkInterface]::GetIsNetworkAvailable())) {
+        Start-Sleep -Seconds 2
+    }
+
     try {
         # RAM Stats
         $ramTotal = "Unknown"; $ramUsed = "Unknown"; $ramPct = "0"
