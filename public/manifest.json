@@ -1,0 +1,9 @@
+{
+  "name": "K-Term Laptop Console",
+  "short_name": "K-Term",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#0f172a",
+  "description": "K-Term Web Terminal, Hardware Monitor & Remote Administration Console"
+}
