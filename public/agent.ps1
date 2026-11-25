@@ -1,4 +1,4 @@
-﻿# K-Term Laptop Agent (PowerShell Edition v1.4.1)
+# K-Term Laptop Agent (PowerShell Edition v1.4.1)
 # Compatible with both `irm ... | iex` and direct `.ps1` execution
 $AgentVersion = "1.4.1"
 $Uninstall = ($args -contains '-Uninstall') -or ($env:KTERM_ACTION -eq 'uninstall')
