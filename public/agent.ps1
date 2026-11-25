@@ -1,9 +1,10 @@
-# K-Term Laptop Agent (PowerShell Edition v1.4.1)
+# K-Term Laptop Agent (PowerShell Edition v1.4.2)
 # Compatible with both `irm ... | iex` and direct `.ps1` execution
-$AgentVersion = "1.4.1"
-$Uninstall = ($args -contains '-Uninstall') -or ($env:KTERM_ACTION -eq 'uninstall')
-$Status    = ($args -contains '-Status')    -or ($env:KTERM_ACTION -eq 'status')
-$Logs      = ($args -contains '-Logs')      -or ($env:KTERM_ACTION -eq 'logs')
+$AgentVersion = "1.4.2"
+$Uninstall  = ($args -contains '-Uninstall')  -or ($env:KTERM_ACTION -eq 'uninstall')
+$Status     = ($args -contains '-Status')     -or ($env:KTERM_ACTION -eq 'status')
+$Logs       = ($args -contains '-Logs')       -or ($env:KTERM_ACTION -eq 'logs')
+$Foreground = ($args -contains '-Foreground') -or ($env:KTERM_FOREGROUND -eq '1')
 $host.UI.RawUI.WindowTitle = "K-Term ⚡ Physical Laptop Agent (PS v$AgentVersion)"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 [Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
@@ -101,7 +102,7 @@ if (-not $env:KTERM_NO_STARTUP) {
         if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
         $scriptSrc = $MyInvocation.MyCommand.ScriptContents
         if ($scriptSrc) {
-            Set-Content -Path $localAgentPath -Value $scriptSrc -Encoding UTF8 -Force
+            [System.IO.File]::WriteAllText($localAgentPath, $scriptSrc, (New-Object System.Text.UTF8Encoding($false)))
         } elseif ($PSCommandPath -and (Test-Path $PSCommandPath)) {
             Copy-Item $PSCommandPath $localAgentPath -Force
         } else {
@@ -113,21 +114,17 @@ if (-not $env:KTERM_NO_STARTUP) {
         $existingRun = (Get-ItemProperty -Path $regRunPath -Name $taskName -ErrorAction SilentlyContinue).$taskName
 
         if (-not $existingTask -and -not $existingRun -and (Test-Path $localAgentPath)) {
-            $registered = $false
             try {
                 $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$localAgentPath`""
                 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
                 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 1)
                 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description "K-Term Physical Laptop Agent" -Force -ErrorAction Stop | Out-Null
-                $registered = $true
                 Write-Host "[+] Auto-Startup              : ENABLED (Scheduled Task '$taskName')" -ForegroundColor Green
                 Write-AgentLog "Registered Scheduled Task '$taskName' -> $localAgentPath"
             } catch {
-                # Non-admin fallback: Current User Registry Run key (no Admin rights required)
                 try {
                     $runCmd = "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$localAgentPath`""
                     Set-ItemProperty -Path $regRunPath -Name $taskName -Value $runCmd -Force -ErrorAction Stop
-                    $registered = $true
                     Write-Host "[+] Auto-Startup              : ENABLED (User Logon Startup '$taskName')" -ForegroundColor Green
                     Write-AgentLog "Registered HKCU Run '$taskName' -> $localAgentPath"
                 } catch {
@@ -140,6 +137,15 @@ if (-not $env:KTERM_NO_STARTUP) {
     } catch {
         Write-Host "[!] Auto-Startup Setup        : Skipped ($($_.Exception.Message))" -ForegroundColor Yellow
     }
+}
+
+# If launched interactively via `irm ... | iex` (no $PSCommandPath), hand off to hidden background process so user can close this window!
+if (-not $PSCommandPath -and -not $Foreground -and (Test-Path $localAgentPath)) {
+    try { $mutex.ReleaseMutex(); $mutex.Dispose() } catch {}
+    Start-Process "powershell.exe" -WindowStyle Hidden -ArgumentList "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$localAgentPath`""
+    Write-Host "`n[+] Status: RUNNING IN BACKGROUND! You can safely close this PowerShell window." -ForegroundColor Green
+    Write-Host "[+] Log File: $logPath`n" -ForegroundColor DarkGray
+    return
 }
 
 Write-Host "`n[+] Status: CONNECTED & LISTENING for commands from Server" -ForegroundColor Green
