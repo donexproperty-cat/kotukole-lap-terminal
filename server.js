@@ -578,7 +578,7 @@ const server = http.createServer((req, res) => {
     // Agent Version Endpoint (for Auto-OTA checks)
     if (req.method === 'GET' && pathname === '/api/agent/version') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ version: '1.4.0' }));
+        return res.end(JSON.stringify({ version: '1.4.1' }));
     }
 
     // Agent Poll Endpoint: Heartbeat & Command Fetching

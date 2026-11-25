@@ -1,11 +1,9 @@
-﻿param(
-    [switch]$Uninstall,
-    [switch]$Status,
-    [switch]$Logs
-)
-
-# K-Term Laptop Agent (PowerShell Edition v1.4.0)
-$AgentVersion = "1.4.0"
+﻿# K-Term Laptop Agent (PowerShell Edition v1.4.1)
+# Compatible with both `irm ... | iex` and direct `.ps1` execution
+$AgentVersion = "1.4.1"
+$Uninstall = ($args -contains '-Uninstall') -or ($env:KTERM_ACTION -eq 'uninstall')
+$Status    = ($args -contains '-Status')    -or ($env:KTERM_ACTION -eq 'status')
+$Logs      = ($args -contains '-Logs')      -or ($env:KTERM_ACTION -eq 'logs')
 $host.UI.RawUI.WindowTitle = "K-Term ⚡ Physical Laptop Agent (PS v$AgentVersion)"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 [Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
@@ -18,7 +16,8 @@ $taskName = "KTermLaptopAgent"
 
 if ($Uninstall) {
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-    Write-Host "[+] Removed Scheduled Task '$taskName'." -ForegroundColor Yellow
+    Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name $taskName -ErrorAction SilentlyContinue
+    Write-Host "[+] Removed Auto-Startup '$taskName'." -ForegroundColor Yellow
     exit 0
 }
 if ($Logs) {
@@ -110,15 +109,33 @@ if (-not $env:KTERM_NO_STARTUP) {
         }
 
         $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-        if (-not $existingTask -and (Test-Path $localAgentPath)) {
-            $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$localAgentPath`""
-            $trigger = New-ScheduledTaskTrigger -AtLogOn
-            $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 1)
-            Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description "K-Term Physical Laptop Agent" -Force | Out-Null
-            Write-Host "[+] Auto-Startup              : ENABLED (Background Task '$taskName' at Windows Logon)" -ForegroundColor Green
-            Write-AgentLog "Registered Background Scheduled Task '$taskName' -> $localAgentPath"
-        } elseif ($existingTask) {
-            Write-Host "[+] Auto-Startup              : ALREADY ENABLED (Task '$taskName')" -ForegroundColor Green
+        $regRunPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+        $existingRun = (Get-ItemProperty -Path $regRunPath -Name $taskName -ErrorAction SilentlyContinue).$taskName
+
+        if (-not $existingTask -and -not $existingRun -and (Test-Path $localAgentPath)) {
+            $registered = $false
+            try {
+                $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$localAgentPath`""
+                $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+                $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 1)
+                Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description "K-Term Physical Laptop Agent" -Force -ErrorAction Stop | Out-Null
+                $registered = $true
+                Write-Host "[+] Auto-Startup              : ENABLED (Scheduled Task '$taskName')" -ForegroundColor Green
+                Write-AgentLog "Registered Scheduled Task '$taskName' -> $localAgentPath"
+            } catch {
+                # Non-admin fallback: Current User Registry Run key (no Admin rights required)
+                try {
+                    $runCmd = "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$localAgentPath`""
+                    Set-ItemProperty -Path $regRunPath -Name $taskName -Value $runCmd -Force -ErrorAction Stop
+                    $registered = $true
+                    Write-Host "[+] Auto-Startup              : ENABLED (User Logon Startup '$taskName')" -ForegroundColor Green
+                    Write-AgentLog "Registered HKCU Run '$taskName' -> $localAgentPath"
+                } catch {
+                    Write-Host "[!] Auto-Startup Setup        : Skipped ($($_.Exception.Message))" -ForegroundColor Yellow
+                }
+            }
+        } elseif ($existingTask -or $existingRun) {
+            Write-Host "[+] Auto-Startup              : ALREADY ENABLED ('$taskName')" -ForegroundColor Green
         }
     } catch {
         Write-Host "[!] Auto-Startup Setup        : Skipped ($($_.Exception.Message))" -ForegroundColor Yellow
