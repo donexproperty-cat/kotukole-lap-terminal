@@ -1,14 +1,45 @@
-﻿# K-Term Laptop Agent (PowerShell Edition v1.3.0)
-$host.UI.RawUI.WindowTitle = "K-Term ⚡ Physical Laptop Agent (PS v1.3.0)"
+﻿param(
+    [switch]$Uninstall,
+    [switch]$Status,
+    [switch]$Logs
+)
+
+# K-Term Laptop Agent (PowerShell Edition v1.4.0)
+$AgentVersion = "1.4.0"
+$host.UI.RawUI.WindowTitle = "K-Term ⚡ Physical Laptop Agent (PS v$AgentVersion)"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 [Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
 
-# Load / Save Local Config (%APPDATA%\KTerm\config.json)
 $configDir = Join-Path $env:APPDATA "KTerm"
 $configPath = Join-Path $configDir "config.json"
 $logDir = Join-Path $env:LOCALAPPDATA "KTerm"
 $logPath = Join-Path $logDir "agent.log"
+$taskName = "KTermLaptopAgent"
+
+if ($Uninstall) {
+    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+    Write-Host "[+] Removed Scheduled Task '$taskName'." -ForegroundColor Yellow
+    exit 0
+}
+if ($Logs) {
+    if (Test-Path $logPath) { Get-Content $logPath -Tail 50 } else { Write-Host "No log file yet." }
+    exit 0
+}
+if ($Status) {
+    $t = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    Write-Host "Task '$taskName': $(if ($t) { $t.State } else { 'Not Installed' })" -ForegroundColor Cyan
+    exit 0
+}
+
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+
+# Single-Instance Mutex to prevent duplicate background agents
+$createdNew = $false
+$mutex = New-Object System.Threading.Mutex($true, "Global\KTermPSAgent", [ref]$createdNew)
+if (-not $createdNew) {
+    Write-Host "[!] K-Term Agent is already running in the background." -ForegroundColor Yellow
+    exit 0
+}
 
 function Write-AgentLog($msg) {
     try {
@@ -19,6 +50,12 @@ function Write-AgentLog($msg) {
         Add-Content -Path $logPath -Value $line -ErrorAction SilentlyContinue
     } catch {}
 }
+
+# Pre-load common assemblies for faster screenshots/GUI operations
+try {
+    Add-Type -AssemblyName System.Drawing -ErrorAction SilentlyContinue
+    Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
+} catch {}
 
 $cfg = @{}
 if (Test-Path $configPath) {
@@ -48,7 +85,7 @@ try {
 } catch {}
 
 Write-Host "=================================================================" -ForegroundColor Cyan
-Write-Host "        ⚡ K-TERM PHYSICAL LAPTOP CONNECTOR (PS v1.3.0) ⚡       " -ForegroundColor Cyan
+Write-Host "        ⚡ K-TERM PHYSICAL LAPTOP CONNECTOR (PS v$AgentVersion) ⚡       " -ForegroundColor Cyan
 Write-Host "=================================================================`n" -ForegroundColor Cyan
 Write-Host "[*] Connecting your laptop to : $serverUrl"
 Write-Host "[*] Machine Name              : $hostname"
@@ -58,7 +95,7 @@ if ($gpuName) { Write-Host "[*] Graphics (GPU)            : $gpuName" }
 Write-Host "[*] CPU Cores                 : $cores"
 Write-Host "[*] Operating OS              : $osName"
 
-# Ensure local copy & Windows Logon Auto-Startup (Scheduled Task) unless disabled
+# Ensure local copy & Windows Logon Auto-Startup (unlimited runtime, survives hours offline)
 $localAgentPath = Join-Path $configDir "agent.ps1"
 if (-not $env:KTERM_NO_STARTUP) {
     try {
@@ -72,12 +109,11 @@ if (-not $env:KTERM_NO_STARTUP) {
             Invoke-WebRequest -Uri "$serverUrl/agent.ps1" -OutFile $localAgentPath -UseBasicParsing -ErrorAction SilentlyContinue
         }
 
-        $taskName = "KTermLaptopAgent"
         $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
         if (-not $existingTask -and (Test-Path $localAgentPath)) {
             $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$localAgentPath`""
             $trigger = New-ScheduledTaskTrigger -AtLogOn
-            $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+            $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 1)
             Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description "K-Term Physical Laptop Agent" -Force | Out-Null
             Write-Host "[+] Auto-Startup              : ENABLED (Background Task '$taskName' at Windows Logon)" -ForegroundColor Green
             Write-AgentLog "Registered Background Scheduled Task '$taskName' -> $localAgentPath"
@@ -91,14 +127,12 @@ if (-not $env:KTERM_NO_STARTUP) {
 
 Write-Host "`n[+] Status: CONNECTED & LISTENING for commands from Server" -ForegroundColor Green
 Write-Host "[+] Log File: $logPath`n" -ForegroundColor DarkGray
-Write-AgentLog "Agent v1.3.0 started -> $serverUrl ($deviceId)"
+Write-AgentLog "Agent v$AgentVersion started -> $serverUrl ($deviceId)"
 
 # Sleep / Wake & Network Change event handlers (instant reconnect when Wi-Fi/Data turns on)
 try {
     Register-ObjectEvent -InputObject ([Microsoft.Win32.SystemEvents]) -EventName PowerModeChanged -Action {
-        if ($EventArgs.Mode -eq 'Resume') {
-            $script:backoffSec = 1
-        }
+        if ($EventArgs.Mode -eq 'Resume') { $script:backoffSec = 1 }
     } | Out-Null
     Register-ObjectEvent -InputObject ([System.Net.NetworkInformation.NetworkChange]) -EventName NetworkAddressChanged -Action {
         $script:backoffSec = 1
@@ -108,14 +142,34 @@ try {
 $lastHandledId = ""
 $currentWorkDir = (Get-Location).Path
 $script:backoffSec = 1
+$lastOtaCheck = [DateTime]::MinValue
 
 while ($true) {
-    # Wait quietly if no network adapter/data is connected yet
+    # Wait quietly if no network adapter/data is connected yet (works even hours later)
     while (-not ([System.Net.NetworkInformation.NetworkInterface]::GetIsNetworkAvailable())) {
-        Start-Sleep -Seconds 2
+        Start-Sleep -Seconds 3
     }
 
     try {
+        # Auto-OTA Version Check every 30 minutes
+        if (([DateTime]::UtcNow - $lastOtaCheck).TotalMinutes -ge 30) {
+            $lastOtaCheck = [DateTime]::UtcNow
+            try {
+                $verResp = Invoke-RestMethod -Uri "$serverUrl/api/agent/version" -Method Get -TimeoutSec 6 -ErrorAction SilentlyContinue
+                if ($verResp -and $verResp.version -and ($verResp.version -ne $AgentVersion) -and (Test-Path $localAgentPath)) {
+                    $tmpNew = "$localAgentPath.new"
+                    Invoke-WebRequest -Uri "$serverUrl/agent.ps1" -OutFile $tmpNew -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
+                    if ((Test-Path $tmpNew) -and ((Get-Item $tmpNew).Length -gt 1000)) {
+                        Move-Item $tmpNew $localAgentPath -Force
+                        Write-AgentLog "Auto-OTA updated to v$($verResp.version). Restarting..."
+                        try { $mutex.ReleaseMutex(); $mutex.Dispose() } catch {}
+                        Start-Process "powershell.exe" -ArgumentList "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$localAgentPath`""
+                        exit 0
+                    }
+                }
+            } catch {}
+        }
+
         # RAM Stats
         $ramTotal = "Unknown"; $ramUsed = "Unknown"; $ramPct = "0"
         try {
@@ -179,7 +233,7 @@ while ($true) {
 
         $bodyObj = @{
             deviceId = $deviceId
-            version = "1.3.0"
+            version = $AgentVersion
             hostname = $hostname
             user = $username
             os = $osName
