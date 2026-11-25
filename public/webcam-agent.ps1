@@ -1,9 +1,12 @@
-param(
+﻿param(
     [string]$ServerURL = "https://kotukole.com/lap",
-    [string]$AgentID = "PC-01"
+    [string]$AgentID = "PC-01",
+    [string]$Secret = $env:KTERM_AGENT_SECRET
 )
 
 $ServerURL = $ServerURL.TrimEnd('/')
+$webcamHeaders = @{}
+if ($Secret) { $webcamHeaders["X-Agent-Secret"] = $Secret }
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 [Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
 
@@ -143,12 +146,17 @@ Function Capture-Webcam {
 # Function to upload photo to K-Term server
 Function Upload-Photo($url, $filePath) {
     if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
-        $out = curl.exe -s -X POST -F "webcamPhoto=@$filePath" "$url/api/upload-webcam"
+        if ($Secret) {
+            $out = curl.exe -s -X POST -H "X-Agent-Secret: $Secret" -F "webcamPhoto=@$filePath" "$url/api/upload-webcam"
+        } else {
+            $out = curl.exe -s -X POST -F "webcamPhoto=@$filePath" "$url/api/upload-webcam"
+        }
         return $out
     }
     try {
         Add-Type -AssemblyName System.Net.Http -ErrorAction SilentlyContinue
         $httpClient = New-Object System.Net.Http.HttpClient
+        if ($Secret) { $httpClient.DefaultRequestHeaders.Add("X-Agent-Secret", $Secret) }
         $multipart = New-Object System.Net.Http.MultipartFormDataContent
         $fileBytes = [System.IO.File]::ReadAllBytes($filePath)
         $byteContent = New-Object System.Net.Http.ByteArrayContent($fileBytes, 0, $fileBytes.Length)
@@ -163,7 +171,7 @@ Function Upload-Photo($url, $filePath) {
 while ($true) {
     try {
         # Poll server for queued commands
-        $response = Invoke-RestMethod -Uri "$ServerURL/api/poll" -Method Get -TimeoutSec 10 -ErrorAction Stop
+        $response = Invoke-RestMethod -Uri "$ServerURL/api/poll" -Method Get -Headers $webcamHeaders -TimeoutSec 10 -ErrorAction Stop
         
         if ($response -and $response.command -eq "webcam") {
             $timeNow = (Get-Date).ToString("HH:mm:ss")

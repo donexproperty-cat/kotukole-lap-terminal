@@ -11,6 +11,21 @@ namespace KTerm
     class Program
     {
         static string ServerUrl = "https://kotukole.com/lap";
+        static string AgentSecret = Environment.GetEnvironmentVariable("KTERM_AGENT_SECRET") ?? "";
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct SYSTEM_POWER_STATUS
+        {
+            public byte ACLineStatus;
+            public byte BatteryFlag;
+            public byte BatteryLifePercent;
+            public byte SystemStatusFlag;
+            public int BatteryLifeTime;
+            public int BatteryFullLifeTime;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS sps);
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
         public class MEMORYSTATUSEX
@@ -84,6 +99,10 @@ namespace KTerm
                 {
                     ServerUrl = ServerUrl.Substring(0, ServerUrl.Length - 1);
                 }
+            }
+            if (args != null && args.Length > 1 && !string.IsNullOrEmpty(args[1]))
+            {
+                AgentSecret = args[1];
             }
 
             // Detect CPU Model via Registry or Environment
@@ -165,7 +184,23 @@ namespace KTerm
                     }
                     catch { }
 
+                    // Battery Status (kernel32 GetSystemPowerStatus)
+                    string batteryPct = "";
+                    string batteryStatus = "";
+                    try
+                    {
+                        SYSTEM_POWER_STATUS sps;
+                        if (GetSystemPowerStatus(out sps) && sps.BatteryLifePercent <= 100)
+                        {
+                            batteryPct = sps.BatteryLifePercent + "%";
+                            batteryStatus = sps.ACLineStatus == 1 ? "Charging/AC" : "On Battery";
+                        }
+                    }
+                    catch { }
+
+                    string deviceId = Environment.MachineName + "@" + Environment.UserName;
                     string pollData = "{"
+                        + "\"deviceId\":\"" + EscapeJson(deviceId) + "\","
                         + "\"hostname\":\"" + EscapeJson(Environment.MachineName) + "\","
                         + "\"user\":\"" + EscapeJson(Environment.UserName) + "\","
                         + "\"os\":\"" + EscapeJson(Environment.OSVersion.ToString()) + "\","
@@ -176,7 +211,9 @@ namespace KTerm
                         + "\"ramPercent\":\"" + EscapeJson(ramPct) + "\","
                         + "\"diskTotal\":\"" + EscapeJson(diskTotal) + "\","
                         + "\"diskFree\":\"" + EscapeJson(diskFree) + "\","
-                        + "\"diskPercent\":\"" + EscapeJson(diskPct) + "\""
+                        + "\"diskPercent\":\"" + EscapeJson(diskPct) + "\","
+                        + "\"battery\":\"" + EscapeJson(batteryPct) + "\","
+                        + "\"batteryStatus\":\"" + EscapeJson(batteryStatus) + "\""
                         + "}";
 
                     string pollResp = PostJson(ServerUrl + "/api/agent/poll", pollData);
@@ -263,6 +300,10 @@ namespace KTerm
             req.ContentType = "application/json";
             req.ContentLength = bytes.Length;
             req.Timeout = 12000;
+            if (!string.IsNullOrEmpty(AgentSecret))
+            {
+                req.Headers["X-Agent-Secret"] = AgentSecret;
+            }
 
             using (var stream = req.GetRequestStream())
             {

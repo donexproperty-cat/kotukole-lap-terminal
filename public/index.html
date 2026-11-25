@@ -1013,6 +1013,7 @@
             <button class="btn-header" onclick="triggerGitSync()" title="Pull latest updates from GitHub" id="btn-git-sync">
                 🔄 Git Sync
             </button>
+            <select id="device-select" onchange="onDeviceChange()" title="Select Target Laptop" style="display:none; background: rgba(15, 23, 42, 0.9); color: #e2e8f0; border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 8px; padding: 5px 10px; font-size: 0.78rem; outline: none; cursor: pointer;"></select>
             <button class="btn-header" onclick="toggleAgentGuide()" title="Agent Setup Guide">
                 ⚙️ Setup
             </button>
@@ -1103,6 +1104,7 @@
                     <div class="stat-value" id="uptime">--</div>
                 </div>
                 <div class="stat-sub" id="os-name">Detecting OS...</div>
+                <div class="stat-sub" id="battery-temp-info" style="margin-top: 4px; color: #94a3b8; font-size: 0.72rem; display: none;"></div>
             </div>
         </div>
 
@@ -1125,9 +1127,15 @@
                 <button class="btn-chip" onclick="captureWebcam()" title="Capture real-time photo from physical laptop webcam" style="border-color: rgba(168, 85, 247, 0.4); color: #c084fc;">
                     📷 Webcam
                 </button>
-                <button class="btn-chip" onclick="recordAudio(5)" title="Record 5s ambient audio from laptop microphone" style="border-color: rgba(239, 68, 68, 0.4); color: #f87171;">
-                    🎙️ Mic (5s)
+                <button class="btn-chip" onclick="recordAudio(getSelectedMicDuration())" title="Record ambient audio from laptop microphone" style="border-color: rgba(239, 68, 68, 0.4); color: #f87171;">
+                    🎙️ Mic (<span id="mic-dur-label">5</span>s)
                 </button>
+                <select id="mic-duration-select" onchange="document.getElementById('mic-dur-label').innerText = this.value" title="Mic recording duration" style="background: rgba(15, 23, 42, 0.85); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 8px; padding: 4px 6px; font-size: 0.75rem; cursor: pointer; outline: none;">
+                    <option value="5">5s</option>
+                    <option value="15">15s</option>
+                    <option value="30">30s</option>
+                    <option value="60">60s</option>
+                </select>
 
                 <button class="btn-chip" onclick="runQuickAction('wifi_profiles')" title="17: View all saved Wi-Fi Profiles">
                     📶 Wi-Fi List
@@ -1159,6 +1167,30 @@
                 <button class="btn-chip" onclick="runQuickAction('save_code')" title="Create a folder on your Desktop and save all project code files into it" style="border-color: rgba(139, 92, 246, 0.4); color: #c084fc;">
                     📦 Save Code to Desktop
                 </button>
+                <button class="btn-chip" onclick="openFileManagerModal()" title="Browse, Upload & Download files on laptop" style="border-color: rgba(34, 197, 94, 0.4); color: #4ade80;">
+                    📂 File Manager
+                </button>
+                <button class="btn-chip" onclick="openClipboardModal()" title="Read or write laptop clipboard" style="border-color: rgba(56, 189, 248, 0.4); color: #38bdf8;">
+                    📋 Clipboard
+                </button>
+                <button class="btn-chip" onclick="openProcessModal()" title="View & kill running processes" style="border-color: rgba(249, 115, 22, 0.4); color: #fb923c;">
+                    ⚙️ Processes
+                </button>
+                <button class="btn-chip" onclick="openPowerModal()" title="Power, Volume & Brightness controls" style="border-color: rgba(239, 68, 68, 0.4); color: #f87171;">
+                    🔌 Power &amp; Vol
+                </button>
+                <button class="btn-chip" onclick="sendNotificationDialog()" title="Show popup toast notification on laptop screen" style="border-color: rgba(234, 179, 8, 0.4); color: #facc15;">
+                    🔔 Notify
+                </button>
+                <button class="btn-chip" onclick="openMonitorsModal()" title="Select monitor for screenshot" style="border-color: rgba(14, 165, 233, 0.4); color: #38bdf8;">
+                    🖥️ Monitors
+                </button>
+                <button class="btn-chip" onclick="openSnippetsModal()" title="Saved commands & history" style="border-color: rgba(168, 85, 247, 0.4); color: #c084fc;">
+                    ⭐ Snippets
+                </button>
+                <a href="Install-Startup.ps1" download class="btn-chip" title="Download Windows Auto-Startup Installer" style="text-decoration:none; border-color: rgba(16, 185, 129, 0.4); color: #34d399;">
+                    🚀 Auto-Start
+                </a>
             </div>
             <div class="actions-group">
                 <button class="btn-chip btn-chip-red" onclick="clearTerminal()" title="Clear terminal screen">
@@ -1244,8 +1276,10 @@
     <script>
         const API_BASE = (window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname + '/').replace(/\/+$/, '') + '/api';
         let authToken = localStorage.getItem('kterm_lap_token') || localStorage.getItem('kotukole_lap_token') || '';
+        let selectedDeviceId = localStorage.getItem('kterm_selected_device') || '';
         let cmdHistory = [];
-        let historyIdx = -1;
+        try { cmdHistory = JSON.parse(localStorage.getItem('kterm_cmd_history') || '[]') || []; } catch(e) { cmdHistory = []; }
+        let historyIdx = cmdHistory.length;
         let isLaptopOnline = false;
         let isRunningCommand = false;
 
@@ -1322,11 +1356,21 @@
             if (e.key === 'Enter') login();
         });
 
+        function onDeviceChange() {
+            const sel = document.getElementById('device-select');
+            if (sel) {
+                selectedDeviceId = sel.value || '';
+                localStorage.setItem('kterm_selected_device', selectedDeviceId);
+                loadStats();
+            }
+        }
+
         // Load Stats
         async function loadStats() {
             if (!authToken) return;
             try {
-                const res = await fetch(`${API_BASE}/stats`, {
+                const devParam = selectedDeviceId ? `?deviceId=${encodeURIComponent(selectedDeviceId)}` : '';
+                const res = await fetch(`${API_BASE}/stats${devParam}`, {
                     headers: { 'Authorization': `Bearer ${authToken}` }
                 });
                 if (res.status === 401) {
@@ -1335,6 +1379,24 @@
                 }
                 if (!res.ok) return;
                 const stats = await res.json();
+
+                // Update multi-device selector dropdown
+                const devSel = document.getElementById('device-select');
+                if (devSel && Array.isArray(stats.agents)) {
+                    if (stats.agents.length > 0) {
+                        devSel.style.display = 'inline-block';
+                        const curVal = selectedDeviceId || (stats.agent && stats.agent.deviceId) || '';
+                        devSel.innerHTML = stats.agents.map(a => {
+                            const label = `${a.online ? '🟢' : '🔴'} ${a.hostname} (${a.user})`;
+                            return `<option value="${escapeHtml(a.deviceId)}" ${a.deviceId === curVal ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+                        }).join('');
+                        if (!selectedDeviceId && stats.agent && stats.agent.deviceId) {
+                            selectedDeviceId = stats.agent.deviceId;
+                        }
+                    } else {
+                        devSel.style.display = 'none';
+                    }
+                }
 
                 const statusPill = document.getElementById('global-status-pill');
                 const statusText = document.getElementById('global-status-text');
@@ -1357,6 +1419,18 @@
                     document.getElementById('cpu-badge').innerText = 'Physical PC';
                     document.getElementById('cpu-model').innerText = stats.agent.cpuModel || 'Windows Processor';
                     document.getElementById('os-name').innerText = stats.agent.os;
+                    const batEl = document.getElementById('battery-temp-info');
+                    if (batEl) {
+                        const parts = [];
+                        if (stats.agent.battery) parts.push(`🔋 ${stats.agent.battery}${stats.agent.batteryStatus ? ' (' + stats.agent.batteryStatus + ')' : ''}`);
+                        if (stats.agent.cpuTemp) parts.push(`🌡️ ${stats.agent.cpuTemp}`);
+                        if (parts.length > 0) {
+                            batEl.innerText = parts.join('  •  ');
+                            batEl.style.display = 'block';
+                        } else {
+                            batEl.style.display = 'none';
+                        }
+                    }
                     document.getElementById('status-tag').innerText = 'ONLINE';
                     document.getElementById('status-tag').style.color = '#10b981';
 
@@ -1496,10 +1570,15 @@
         function normalizeMediaUrl(url) {
             if (!url) return '';
             if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('http://') || url.startsWith('https://')) return url;
-            if (url.startsWith('/lap/')) return url;
-            if (url.startsWith('/uploads/')) return '/lap' + url;
-            if (url.startsWith('uploads/')) return '/lap/' + url;
-            return '/lap/' + url.replace(/^\/+/, '');
+            let finalUrl = url;
+            if (url.startsWith('/lap/')) finalUrl = url;
+            else if (url.startsWith('/uploads/')) finalUrl = '/lap' + url;
+            else if (url.startsWith('uploads/')) finalUrl = '/lap/' + url;
+            else finalUrl = '/lap/' + url.replace(/^\/+/, '');
+            if (authToken && finalUrl.includes('/uploads/') && !finalUrl.includes('token=')) {
+                finalUrl += (finalUrl.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(authToken);
+            }
+            return finalUrl;
         }
 
         // Screen Capture Helpers
@@ -1660,8 +1739,71 @@
         }
 
         // Audio Recording Helpers
+        function getSelectedMicDuration() {
+            const sel = document.getElementById('mic-duration-select');
+            const val = sel ? parseInt(sel.value, 10) : 5;
+            return (val >= 1 && val <= 120) ? val : 5;
+        }
+
         function recordAudio(seconds = 5) {
-            runQuickAction('mic');
+            if (!isLaptopOnline) {
+                runQuickAction('mic');
+                return;
+            }
+            const sec = Math.max(1, Math.min(120, parseInt(seconds, 10) || 5));
+            if (sec === 5) {
+                runQuickAction('mic');
+                return;
+            }
+            // Custom duration PowerShell mic recording (uses exact same ==KTERM_AUDIO== output format)
+            const ps = `$sec = ${sec}
+$wavPath = "$env:TEMP\\kmic_$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()).wav"
+$code = @"
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+using System.Threading;
+public class AudioRec {
+    [DllImport("winmm.dll", EntryPoint = "mciSendStringA", CharSet = CharSet.Ansi, SetLastError = true)]
+    public static extern int mciSendString(string cmd, StringBuilder ret, int retLen, IntPtr hwnd);
+    public static bool Record(string path, int seconds) {
+        try {
+            mciSendString("close recsound", null, 0, IntPtr.Zero);
+            mciSendString("open new type waveaudio alias recsound", null, 0, IntPtr.Zero);
+            mciSendString("set recsound time format ms", null, 0, IntPtr.Zero);
+            mciSendString("set recsound bitspersample 16 channels 1 samplespersec 16000", null, 0, IntPtr.Zero);
+            mciSendString("record recsound", null, 0, IntPtr.Zero);
+            Thread.Sleep(seconds * 1000);
+            mciSendString("save recsound \\"" + path + "\\"", null, 0, IntPtr.Zero);
+            mciSendString("close recsound", null, 0, IntPtr.Zero);
+            return System.IO.File.Exists(path);
+        } catch { return false; }
+    }
+}
+"@
+Add-Type -TypeDefinition $code -ErrorAction SilentlyContinue
+$rec = $false
+try { $rec = [AudioRec]::Record($wavPath, $sec) } catch {}
+if ($rec -and (Test-Path $wavPath)) {
+    $bytes = [System.IO.File]::ReadAllBytes($wavPath)
+    $b64 = [Convert]::ToBase64String($bytes)
+    Remove-Item $wavPath -Force -ErrorAction SilentlyContinue
+    Write-Output "==KTERM_AUDIO==data:audio/wav;base64,$b64==END_AUDIO=="
+} else {
+    Write-Output "[Notice: Microphone recording failed. Check microphone permissions.]"
+}`;
+            const bytes = new TextEncoder().encode(ps);
+            let utf16 = '';
+            const arr = new Uint8Array(bytes.length * 2);
+            for (let i = 0; i < ps.length; i++) {
+                const code = ps.charCodeAt(i);
+                arr[i * 2] = code & 0xff;
+                arr[i * 2 + 1] = (code >> 8) & 0xff;
+            }
+            let bin = '';
+            for (let i = 0; i < arr.length; i++) bin += String.fromCharCode(arr[i]);
+            cmdInput.value = 'powershell -NoProfile -ExecutionPolicy Bypass -enc ' + btoa(bin);
+            submitCommand();
         }
 
         function renderAudioCard(audioUrl) {
@@ -1877,11 +2019,14 @@
                                cmd.includes('JABzAGUAYwAgAD0AIAA') ? 'mic (Recording 5s laptop microphone audio...)' : cmd;
             appendOutput(displayCmd, 'cmd');
             cmdHistory.push(cmd);
+            if (cmdHistory.length > 100) cmdHistory = cmdHistory.slice(-100);
+            try { localStorage.setItem('kterm_cmd_history', JSON.stringify(cmdHistory)); } catch(e) {}
             historyIdx = cmdHistory.length;
             cmdInput.value = '';
 
             let exitedNormally = false;
-            const evtSource = new EventSource(`${API_BASE}/exec?cmd=${encodeURIComponent(cmd)}&token=${encodeURIComponent(authToken)}`);
+            const devQs = selectedDeviceId ? `&deviceId=${encodeURIComponent(selectedDeviceId)}` : '';
+            const evtSource = new EventSource(`${API_BASE}/exec?cmd=${encodeURIComponent(cmd)}&token=${encodeURIComponent(authToken)}${devQs}`);
 
             evtSource.addEventListener('stdout', (e) => {
                 const text = JSON.parse(e.data);
@@ -2000,6 +2145,9 @@
                     <a id="btn-download-screenshot" href="#" download="kterm-laptop-screenshot.jpg" class="btn-banner btn-banner-blue" style="text-decoration: none;">
                         ⬇️ Download (.JPG)
                     </a>
+                    <button id="btn-live-screen" class="btn-banner btn-banner-ghost" onclick="toggleLiveScreen()" title="Auto-refresh screenshot every 3s">
+                        🔴 Live Screen
+                    </button>
                     <button class="btn-banner btn-banner-green" onclick="captureScreenshot()" title="Retake Screenshot">
                         🔄 Retake
                     </button>
@@ -2029,6 +2177,9 @@
                     <a id="btn-download-webcam" href="#" download="kterm-laptop-webcam.jpg" class="btn-banner btn-banner-blue" style="text-decoration: none;">
                         ⬇️ Download (.JPG)
                     </a>
+                    <button id="btn-live-webcam" class="btn-banner btn-banner-ghost" onclick="toggleLiveWebcam()" title="Auto-refresh webcam every 4s">
+                        🔴 Live Cam
+                    </button>
                     <button class="btn-banner btn-banner-green" onclick="captureWebcam()" title="Retake Photo" style="background: linear-gradient(135deg, #9333ea, #a855f7);">
                         🔄 Retake
                     </button>
@@ -2043,5 +2194,465 @@
         </div>
     </div>
 
+    <!-- Generic Feature Modal (File Manager, Clipboard, Processes, Power, Monitors, Snippets) -->
+    <div class="screenshot-modal-overlay" id="kterm-feature-modal" onclick="if(event.target===this) closeFeatureModal()">
+        <div class="screenshot-modal-card" style="max-width: 820px; width: 94%; max-height: 88vh; display: flex; flex-direction: column;" onclick="event.stopPropagation()">
+            <div class="screenshot-modal-header">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div class="brand-icon" id="fm-modal-icon" style="width: 32px; height: 32px; font-size: 16px;">⚡</div>
+                    <div>
+                        <h3 id="fm-modal-title" style="font-size: 0.98rem; font-weight: 700; color: #fff;">K-Term Tool</h3>
+                        <span id="fm-modal-sub" style="font-size: 0.72rem; color: #94a3b8;">Connected Device</span>
+                    </div>
+                </div>
+                <button class="btn-banner btn-banner-ghost" onclick="closeFeatureModal()" style="padding: 5px 10px; font-size: 0.9rem;">✕</button>
+            </div>
+            <div id="fm-modal-body" style="padding: 16px; overflow-y: auto; flex: 1; color: #e2e8f0; font-size: 0.85rem;"></div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        // K-TERM PRO ADD-ONS (NON-INTRUSIVE EXTENSIONS)
+        // ============================================================
+
+        function encodePsBase64(psScript) {
+            const arr = new Uint8Array(psScript.length * 2);
+            for (let i = 0; i < psScript.length; i++) {
+                const c = psScript.charCodeAt(i);
+                arr[i * 2] = c & 0xff;
+                arr[i * 2 + 1] = (c >> 8) & 0xff;
+            }
+            let bin = '';
+            for (let i = 0; i < arr.length; i++) bin += String.fromCharCode(arr[i]);
+            return btoa(bin);
+        }
+
+        function execQuiet(cmd) {
+            return new Promise((resolve, reject) => {
+                if (!authToken) return reject(new Error('Not authenticated'));
+                const devQs = selectedDeviceId ? `&deviceId=${encodeURIComponent(selectedDeviceId)}` : '';
+                const es = new EventSource(`${API_BASE}/exec?cmd=${encodeURIComponent(cmd)}&token=${encodeURIComponent(authToken)}${devQs}`);
+                let out = '';
+                let err = '';
+                let done = false;
+                es.addEventListener('stdout', (e) => {
+                    const chunk = JSON.parse(e.data);
+                    if (typeof chunk === 'string' && !chunk.startsWith('[⚡ EXECUTING ON PHYSICAL LAPTOP')) {
+                        out += chunk;
+                    }
+                });
+                es.addEventListener('stderr', (e) => { err += JSON.parse(e.data); });
+                es.addEventListener('exit', () => { done = true; es.close(); resolve({ out: out.trim(), err: err.trim() }); });
+                es.onerror = () => { if (!done) { es.close(); resolve({ out: out.trim(), err: err.trim() || 'Connection error' }); } };
+            });
+        }
+
+        function execPsQuiet(psScript) {
+            return execQuiet('powershell -NoProfile -ExecutionPolicy Bypass -enc ' + encodePsBase64(psScript));
+        }
+
+        function openFeatureModal(icon, title, sub, html) {
+            document.getElementById('fm-modal-icon').innerText = icon;
+            document.getElementById('fm-modal-title').innerText = title;
+            document.getElementById('fm-modal-sub').innerText = sub || (isLaptopOnline ? 'Physical Laptop Online' : 'Cloud VPS Fallback');
+            document.getElementById('fm-modal-body').innerHTML = html;
+            document.getElementById('kterm-feature-modal').style.display = 'flex';
+        }
+
+        function closeFeatureModal() {
+            document.getElementById('kterm-feature-modal').style.display = 'none';
+        }
+
+        // 1. LIVE SCREEN & LIVE WEBCAM STREAM TOGGLES
+        let liveScreenTimer = null;
+        let liveWebcamTimer = null;
+
+        function toggleLiveScreen() {
+            const btn = document.getElementById('btn-live-screen');
+            if (liveScreenTimer) {
+                clearInterval(liveScreenTimer);
+                liveScreenTimer = null;
+                if (btn) { btn.innerText = '🔴 Live Screen'; btn.style.background = ''; }
+            } else {
+                if (btn) { btn.innerText = '⏹️ Stop Live'; btn.style.background = '#dc2626'; }
+                runQuickAction('screenshot');
+                liveScreenTimer = setInterval(() => {
+                    const m = document.getElementById('screenshot-modal');
+                    if (!m || m.style.display === 'none') {
+                        clearInterval(liveScreenTimer);
+                        liveScreenTimer = null;
+                        if (btn) { btn.innerText = '🔴 Live Screen'; btn.style.background = ''; }
+                        return;
+                    }
+                    if (!isRunningCommand) runQuickAction('screenshot');
+                }, 3500);
+            }
+        }
+
+        function toggleLiveWebcam() {
+            const btn = document.getElementById('btn-live-webcam');
+            if (liveWebcamTimer) {
+                clearInterval(liveWebcamTimer);
+                liveWebcamTimer = null;
+                if (btn) { btn.innerText = '🔴 Live Cam'; btn.style.background = ''; }
+            } else {
+                if (btn) { btn.innerText = '⏹️ Stop Live'; btn.style.background = '#dc2626'; }
+                captureWebcamKeepModal();
+                liveWebcamTimer = setInterval(() => {
+                    const m = document.getElementById('webcam-modal');
+                    if (!m || m.style.display === 'none') {
+                        clearInterval(liveWebcamTimer);
+                        liveWebcamTimer = null;
+                        if (btn) { btn.innerText = '🔴 Live Cam'; btn.style.background = ''; }
+                        return;
+                    }
+                    captureWebcamKeepModal();
+                }, 4000);
+            }
+        }
+
+        async function captureWebcamKeepModal() {
+            try {
+                await fetch(`${API_BASE}/command?token=${encodeURIComponent(authToken)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+                    body: JSON.stringify({ command: 'webcam' })
+                });
+            } catch (e) {}
+            if (isLaptopOnline && !isRunningCommand) {
+                runQuickAction('webcam');
+            }
+        }
+
+        // 2. FILE MANAGER (BROWSE, UPLOAD, DOWNLOAD, DELETE, MKDIR)
+        let currentFmPath = 'C:\\Users';
+
+        async function openFileManagerModal(pathArg) {
+            if (!isLaptopOnline) {
+                alert('File Manager requires Physical Laptop Agent to be ONLINE.');
+                return;
+            }
+            if (pathArg) currentFmPath = pathArg;
+            openFeatureModal('📂', 'Laptop File Manager', currentFmPath, '<div style="padding:20px;text-align:center;color:#94a3b8;">⏳ Loading directory...</div>');
+            await refreshFileManager(currentFmPath);
+        }
+
+        async function refreshFileManager(dirPath) {
+            currentFmPath = dirPath || currentFmPath;
+            document.getElementById('fm-modal-sub').innerText = currentFmPath;
+            const ps = `$p = "${currentFmPath.replace(/"/g, '`"')}"
+if (-not (Test-Path $p)) { Write-Output "ERR:Path not found"; exit }
+$items = Get-ChildItem -LiteralPath $p -Force -ErrorAction SilentlyContinue | Select-Object Name, PSIsContainer, Length, LastWriteTime | Sort-Object @{Expression="PSIsContainer";Descending=$true}, Name
+$items | ConvertTo-Json -Compress`;
+            const res = await execPsQuiet(ps);
+            if (res.out.startsWith('ERR:')) {
+                document.getElementById('fm-modal-body').innerHTML = `<div style="color:#f87171;">${escapeHtml(res.out)}</div><button class="btn-chip" onclick="refreshFileManager('C:\\\\')">Go to C:\\</button>`;
+                return;
+            }
+            let list = [];
+            try {
+                const parsed = JSON.parse(res.out || '[]');
+                list = Array.isArray(parsed) ? parsed : [parsed];
+            } catch (e) {}
+
+            const parentPath = currentFmPath.replace(/\\+$/, '').split('\\').slice(0, -1).join('\\') || 'C:\\';
+            let rows = list.slice(0, 150).map(item => {
+                const isDir = !!item.PSIsContainer;
+                const full = (currentFmPath.endsWith('\\') ? currentFmPath : currentFmPath + '\\') + item.Name;
+                const safeFull = full.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                const sizeStr = isDir ? 'FOLDER' : (item.Length > 1048576 ? (item.Length / 1048576).toFixed(1) + ' MB' : Math.ceil((item.Length || 0) / 1024) + ' KB');
+                return `<tr style="border-bottom:1px solid rgba(148,163,184,0.12);">
+                    <td style="padding:7px 6px;">${isDir ? '📁' : '📄'} <span style="cursor:${isDir ? 'pointer' : 'default'};color:${isDir ? '#38bdf8' : '#e2e8f0'};" ${isDir ? `onclick="refreshFileManager('${safeFull}')"` : ''}>${escapeHtml(item.Name)}</span></td>
+                    <td style="padding:7px 6px;color:#94a3b8;font-size:0.75rem;">${sizeStr}</td>
+                    <td style="padding:7px 6px;text-align:right;white-space:nowrap;">
+                        ${!isDir ? `<button class="btn-chip" style="padding:2px 8px;font-size:0.72rem;" onclick="downloadLaptopFile('${safeFull}')">⬇️</button>` : ''}
+                        <button class="btn-chip btn-chip-red" style="padding:2px 8px;font-size:0.72rem;" onclick="deleteLaptopItem('${safeFull}')">🗑️</button>
+                    </td>
+                </tr>`;
+            }).join('');
+
+            document.getElementById('fm-modal-body').innerHTML = `
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+                    <input id="fm-path-input" value="${escapeHtml(currentFmPath)}" style="flex:1;min-width:200px;background:#0f172a;color:#fff;border:1px solid #334155;border-radius:6px;padding:6px 10px;font-size:0.8rem;">
+                    <button class="btn-chip" onclick="refreshFileManager(document.getElementById('fm-path-input').value)">Go</button>
+                    <button class="btn-chip" onclick="refreshFileManager('${parentPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')">⬆️ Up</button>
+                    <button class="btn-chip" onclick="createLaptopFolder()">➕ New Folder</button>
+                    <label class="btn-chip" style="cursor:pointer;border-color:rgba(34,197,94,0.5);color:#4ade80;">
+                        ⬆️ Upload File <input type="file" style="display:none;" onchange="uploadToLaptop(this)">
+                    </label>
+                </div>
+                <div style="max-height:55vh;overflow-y:auto;">
+                    <table style="width:100%;border-collapse:collapse;">
+                        <thead><tr style="text-align:left;color:#94a3b8;border-bottom:1px solid #334155;"><th style="padding:6px;">Name</th><th style="padding:6px;">Size</th><th style="padding:6px;text-align:right;">Actions</th></tr></thead>
+                        <tbody>${rows || '<tr><td colspan="3" style="padding:16px;text-align:center;color:#64748b;">Empty folder</td></tr>'}</tbody>
+                    </table>
+                </div>`;
+        }
+
+        async function uploadToLaptop(input) {
+            if (!input.files || !input.files[0]) return;
+            const file = input.files[0];
+            const form = new FormData();
+            form.append('file', file);
+            const stageRes = await fetch(`${API_BASE}/files/stage?token=${encodeURIComponent(authToken)}`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${authToken}` },
+                body: form
+            });
+            const data = await stageRes.json();
+            if (!data.success) { alert('Upload failed: ' + (data.error || 'Unknown')); return; }
+            const baseOrigin = window.location.origin + API_BASE;
+            const dest = (currentFmPath.endsWith('\\') ? currentFmPath : currentFmPath + '\\') + data.name;
+            const ps = `[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri "${baseOrigin}/agent/file/${data.fileId}" -OutFile "${dest.replace(/"/g, '`"')}"; Write-Output "OK"`;
+            await execPsQuiet(ps);
+            await refreshFileManager(currentFmPath);
+        }
+
+        async function downloadLaptopFile(fullPath) {
+            const baseOrigin = window.location.origin + API_BASE;
+            const ps = `$p = "${fullPath.replace(/"/g, '`"')}"
+if (-not (Test-Path $p)) { Write-Output "ERR:Not found"; exit }
+$out = curl.exe -s -X POST -F "file=@$p" "${baseOrigin}/agent/file-upload"
+Write-Output $out`;
+            const res = await execPsQuiet(ps);
+            try {
+                const json = JSON.parse(res.out);
+                if (json.success && json.fileId) {
+                    window.open(`${API_BASE}/files/download/${json.fileId}?token=${encodeURIComponent(authToken)}`, '_blank');
+                } else {
+                    alert('Download failed: ' + (json.error || res.out));
+                }
+            } catch (e) {
+                alert('Download error: ' + res.out);
+            }
+        }
+
+        async function deleteLaptopItem(fullPath) {
+            if (!confirm('Delete permanently from laptop?\n' + fullPath)) return;
+            await execPsQuiet(`Remove-Item -LiteralPath "${fullPath.replace(/"/g, '`"')}" -Recurse -Force -ErrorAction SilentlyContinue`);
+            await refreshFileManager(currentFmPath);
+        }
+
+        async function createLaptopFolder() {
+            const name = prompt('New folder name:');
+            if (!name) return;
+            const target = (currentFmPath.endsWith('\\') ? currentFmPath : currentFmPath + '\\') + name;
+            await execPsQuiet(`New-Item -ItemType Directory -Path "${target.replace(/"/g, '`"')}" -Force | Out-Null`);
+            await refreshFileManager(currentFmPath);
+        }
+
+        // 3. CLIPBOARD SYNC
+        async function openClipboardModal() {
+            if (!isLaptopOnline) { alert('Clipboard Sync requires Physical Laptop Agent.'); return; }
+            openFeatureModal('📋', 'Laptop Clipboard Sync', 'Read or update Windows clipboard', '<div style="color:#94a3b8;">⏳ Reading laptop clipboard...</div>');
+            const res = await execPsQuiet('Get-Clipboard -Raw');
+            document.getElementById('fm-modal-body').innerHTML = `
+                <label style="display:block;margin-bottom:6px;color:#94a3b8;">Laptop Clipboard Content:</label>
+                <textarea id="clip-text-box" rows="7" style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:8px;padding:10px;font-family:monospace;">${escapeHtml(res.out)}</textarea>
+                <div style="display:flex;gap:8px;margin-top:10px;">
+                    <button class="btn-chip" onclick="openClipboardModal()">🔄 Refresh from Laptop</button>
+                    <button class="btn-chip" style="border-color:rgba(56,189,248,0.5);color:#38bdf8;" onclick="pushClipboardToLaptop()">📤 Push to Laptop Clipboard</button>
+                    <button class="btn-chip" onclick="navigator.clipboard.writeText(document.getElementById('clip-text-box').value)">📋 Copy to My Device</button>
+                </div>`;
+        }
+
+        async function pushClipboardToLaptop() {
+            const txt = document.getElementById('clip-text-box').value || '';
+            const b64 = btoa(unescape(encodeURIComponent(txt)));
+            await execPsQuiet(`$t = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${b64}")); Set-Clipboard -Value $t`);
+            alert('Clipboard updated on laptop! ✓');
+        }
+
+        // 4. PROCESS / TASK MANAGER
+        async function openProcessModal() {
+            if (!isLaptopOnline) { alert('Process Manager requires Physical Laptop Agent.'); return; }
+            openFeatureModal('⚙️', 'Laptop Task Manager', 'Top processes by Memory', '<div style="color:#94a3b8;">⏳ Loading running processes...</div>');
+            const ps = `Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 40 Id, ProcessName, @{N="MemMB";E={[Math]::Round($_.WorkingSet64/1MB,1)}} | ConvertTo-Json -Compress`;
+            const res = await execPsQuiet(ps);
+            let procs = [];
+            try { procs = JSON.parse(res.out || '[]'); if (!Array.isArray(procs)) procs = [procs]; } catch (e) {}
+            const rows = procs.map(p => `<tr style="border-bottom:1px solid rgba(148,163,184,0.12);">
+                <td style="padding:6px;color:#94a3b8;">${p.Id}</td>
+                <td style="padding:6px;color:#e2e8f0;">${escapeHtml(p.ProcessName || '')}</td>
+                <td style="padding:6px;color:#38bdf8;">${p.MemMB} MB</td>
+                <td style="padding:6px;text-align:right;"><button class="btn-chip btn-chip-red" style="padding:2px 8px;font-size:0.72rem;" onclick="killLaptopProcess(${p.Id}, '${escapeHtml((p.ProcessName||'').replace(/'/g,''))}')">End Task</button></td>
+            </tr>`).join('');
+            document.getElementById('fm-modal-body').innerHTML = `
+                <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
+                    <span style="color:#94a3b8;">Showing top 40 processes by RAM</span>
+                    <button class="btn-chip" onclick="openProcessModal()">🔄 Refresh</button>
+                </div>
+                <div style="max-height:58vh;overflow-y:auto;">
+                    <table style="width:100%;border-collapse:collapse;">
+                        <thead><tr style="text-align:left;color:#94a3b8;border-bottom:1px solid #334155;"><th style="padding:6px;">PID</th><th style="padding:6px;">Process</th><th style="padding:6px;">RAM</th><th style="padding:6px;text-align:right;">Action</th></tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>`;
+        }
+
+        async function killLaptopProcess(pid, name) {
+            if (!confirm(`Kill process ${name} (PID ${pid})?`)) return;
+            await execPsQuiet(`Stop-Process -Id ${pid} -Force -ErrorAction SilentlyContinue`);
+            await openProcessModal();
+        }
+
+        // 5. POWER, VOLUME & BRIGHTNESS CONTROLS
+        function openPowerModal() {
+            if (!isLaptopOnline) { alert('Power & Audio Controls require Physical Laptop Agent.'); return; }
+            openFeatureModal('🔌', 'Power, Volume & Brightness', 'Remote Hardware Controls', `
+                <div style="display:grid;gap:14px;">
+                    <div style="background:#0f172a;padding:12px;border-radius:8px;border:1px solid #1e293b;">
+                        <div style="font-weight:600;margin-bottom:8px;">🔊 Volume Controls</div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <button class="btn-chip" onclick="sendMediaKey(173)">🔇 Mute / Unmute</button>
+                            <button class="btn-chip" onclick="sendMediaKey(174)">🔉 Vol -</button>
+                            <button class="btn-chip" onclick="sendMediaKey(175)">🔊 Vol +</button>
+                            <button class="btn-chip" onclick="sendMediaKey(179)">⏯️ Play / Pause</button>
+                        </div>
+                    </div>
+                    <div style="background:#0f172a;padding:12px;border-radius:8px;border:1px solid #1e293b;">
+                        <div style="font-weight:600;margin-bottom:8px;">☀️ Screen Brightness: <span id="bright-val">70</span>%</div>
+                        <input type="range" min="10" max="100" value="70" style="width:100%;" oninput="document.getElementById('bright-val').innerText=this.value" onchange="setLaptopBrightness(this.value)">
+                    </div>
+                    <div style="background:#0f172a;padding:12px;border-radius:8px;border:1px solid #1e293b;">
+                        <div style="font-weight:600;margin-bottom:8px;">⚡ Power Actions</div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <button class="btn-chip" onclick="runQuickAction('lock')">🔒 Lock</button>
+                            <button class="btn-chip" onclick="powerAction('sleep')">🌙 Sleep</button>
+                            <button class="btn-chip" style="border-color:rgba(245,158,11,0.5);color:#fbbf24;" onclick="powerAction('restart')">🔄 Restart</button>
+                            <button class="btn-chip btn-chip-red" onclick="powerAction('shutdown')">⏻ Shutdown</button>
+                        </div>
+                    </div>
+                </div>`);
+        }
+
+        async function sendMediaKey(vk) {
+            const ps = `$code = '[DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, int dwFlags, int dwExtraInfo);'
+$t = Add-Type -MemberDefinition $code -Name K -Namespace W -PassThru
+$t::keybd_event(${vk}, 0, 0, 0); $t::keybd_event(${vk}, 0, 2, 0)`;
+            await execPsQuiet(ps);
+        }
+
+        async function setLaptopBrightness(pct) {
+            await execPsQuiet(`(Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods).WmiSetBrightness(1, ${parseInt(pct, 10) || 70})`);
+        }
+
+        async function powerAction(mode) {
+            if (!confirm(`Confirm ${mode.toUpperCase()} on physical laptop?`)) return;
+            if (mode === 'sleep') await execQuiet('rundll32.exe powrprof.dll,SetSuspendState 0,1,0');
+            else if (mode === 'restart') await execQuiet('shutdown /r /t 5');
+            else if (mode === 'shutdown') await execQuiet('shutdown /s /t 5');
+        }
+
+        // 6. TOAST / POPUP NOTIFICATION SENDER
+        async function sendNotificationDialog() {
+            if (!isLaptopOnline) { alert('Notification requires Physical Laptop Agent.'); return; }
+            const msg = prompt('Enter message to display as popup notification on laptop screen:', 'Hello from K-Term Remote!');
+            if (!msg) return;
+            const b64 = btoa(unescape(encodeURIComponent(msg)));
+            const ps = `Add-Type -AssemblyName System.Windows.Forms
+$txt = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${b64}"))
+$n = New-Object System.Windows.Forms.NotifyIcon
+$n.Icon = [System.Drawing.SystemIcons]::Information
+$n.BalloonTipTitle = "K-Term Notification"
+$n.BalloonTipText = $txt
+$n.Visible = $true
+$n.ShowBalloonTip(5000)
+Start-Sleep -Seconds 2
+$n.Dispose()`;
+            await execPsQuiet(ps);
+            appendOutput(`🔔 [Notification Sent] "${msg}"`, 'out');
+        }
+
+        // 7. MULTI-MONITOR SCREENSHOT SELECTOR
+        async function openMonitorsModal() {
+            if (!isLaptopOnline) { alert('Monitors info requires Physical Laptop Agent.'); return; }
+            openFeatureModal('🖥️', 'Multi-Monitor Capture', 'Detecting connected displays...', '<div style="color:#94a3b8;">⏳ Scanning monitors...</div>');
+            const ps = `Add-Type -AssemblyName System.Windows.Forms; $i=0; [System.Windows.Forms.Screen]::AllScreens | ForEach-Object { [PSCustomObject]@{Index=$i; Device=$_.DeviceName; Primary=$_.Primary; W=$_.Bounds.Width; H=$_.Bounds.Height}; $i++ } | ConvertTo-Json -Compress`;
+            const res = await execPsQuiet(ps);
+            let screens = [];
+            try { screens = JSON.parse(res.out || '[]'); if (!Array.isArray(screens)) screens = [screens]; } catch (e) {}
+            const cards = screens.map(s => `
+                <div style="background:#0f172a;padding:12px;border-radius:8px;border:1px solid #334155;display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <div style="font-weight:700;color:#fff;">🖥️ Display ${s.Index + 1} ${s.Primary ? '<span style="color:#10b981;font-size:0.75rem;">(Primary)</span>' : ''}</div>
+                        <div style="color:#94a3b8;font-size:0.78rem;">${escapeHtml(s.Device || '')} • ${s.W} × ${s.H}</div>
+                    </div>
+                    <button class="btn-chip" style="border-color:rgba(56,189,248,0.5);color:#38bdf8;" onclick="captureMonitor(${s.Index})">📸 Capture</button>
+                </div>`).join('');
+            document.getElementById('fm-modal-body').innerHTML = `<div style="display:grid;gap:10px;">${cards || 'No monitors detected'}</div>`;
+        }
+
+        function captureMonitor(idx) {
+            closeFeatureModal();
+            const ps = `Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName System.Windows.Forms
+$s = [System.Windows.Forms.Screen]::AllScreens[${parseInt(idx, 10) || 0}]
+$b = $s.Bounds
+$bmp = New-Object Drawing.Bitmap $b.Width, $b.Height
+$g = [Drawing.Graphics]::FromImage($bmp)
+$g.CopyFromScreen($b.Location, [Drawing.Point]::Empty, $b.Size)
+$codec = [Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.MimeType -eq 'image/jpeg' }
+$params = New-Object Drawing.Imaging.EncoderParameters(1)
+$params.Param[0] = New-Object Drawing.Imaging.EncoderParameter([Drawing.Imaging.Encoder]::Quality, [long]60)
+$ms = New-Object IO.MemoryStream
+$bmp.Save($ms, $codec, $params)
+$b64 = [Convert]::ToBase64String($ms.ToArray())
+$g.Dispose(); $bmp.Dispose(); $ms.Dispose()
+Write-Output ('==KTERM_SCREENSHOT==data:image/jpeg;base64,' + $b64 + '==END_SCREENSHOT==')`;
+            cmdInput.value = 'powershell -NoProfile -ExecutionPolicy Bypass -enc ' + encodePsBase64(ps);
+            submitCommand();
+        }
+
+        // 8. SAVED SNIPPETS & COMMAND HISTORY
+        function getSavedSnippets() {
+            try { return JSON.parse(localStorage.getItem('kterm_snippets') || '[]') || []; } catch (e) { return []; }
+        }
+
+        function openSnippetsModal() {
+            const snippets = getSavedSnippets();
+            const snipHtml = snippets.map((s, i) => `
+                <div style="display:flex;justify-content:space-between;align-items:center;background:#0f172a;padding:8px 10px;border-radius:6px;border:1px solid #1e293b;">
+                    <div><strong style="color:#c084fc;">${escapeHtml(s.name)}</strong><div style="font-family:monospace;font-size:0.76rem;color:#94a3b8;">${escapeHtml(s.cmd)}</div></div>
+                    <div style="display:flex;gap:6px;">
+                        <button class="btn-chip" onclick="closeFeatureModal();insertCmd('${escapeHtml(s.cmd).replace(/'/g, "\\'")}');submitCommand();">▶ Run</button>
+                        <button class="btn-chip btn-chip-red" onclick="deleteSnippet(${i})">✕</button>
+                    </div>
+                </div>`).join('');
+            const histHtml = [...cmdHistory].reverse().slice(0, 20).map(c => `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;border-bottom:1px solid rgba(148,163,184,0.1);">
+                    <span style="font-family:monospace;font-size:0.78rem;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:75%;">${escapeHtml(c)}</span>
+                    <button class="btn-chip" style="padding:2px 8px;font-size:0.72rem;" onclick="closeFeatureModal();insertCmd('${escapeHtml(c).replace(/'/g, "\\'")}')">Use</button>
+                </div>`).join('');
+            openFeatureModal('⭐', 'Saved Snippets & History', 'Quickly reuse commands', `
+                <div style="display:grid;gap:14px;">
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <input id="snip-name" placeholder="Snippet name" style="flex:1;min-width:120px;background:#0f172a;color:#fff;border:1px solid #334155;border-radius:6px;padding:6px 10px;">
+                        <input id="snip-cmd" placeholder="Command" style="flex:2;min-width:180px;background:#0f172a;color:#fff;border:1px solid #334155;border-radius:6px;padding:6px 10px;">
+                        <button class="btn-chip" onclick="addSnippet()">➕ Save</button>
+                    </div>
+                    <div><div style="color:#94a3b8;margin-bottom:6px;font-weight:600;">⭐ Saved Snippets</div><div style="display:grid;gap:6px;">${snipHtml || '<div style="color:#64748b;">No saved snippets yet.</div>'}</div></div>
+                    <div><div style="color:#94a3b8;margin-bottom:6px;font-weight:600;">🕘 Recent History</div><div style="max-height:200px;overflow-y:auto;background:#0f172a;border-radius:6px;border:1px solid #1e293b;">${histHtml || '<div style="padding:10px;color:#64748b;">No history yet.</div>'}</div></div>
+                </div>`);
+        }
+
+        function addSnippet() {
+            const name = (document.getElementById('snip-name').value || '').trim();
+            const cmd = (document.getElementById('snip-cmd').value || '').trim();
+            if (!name || !cmd) return;
+            const list = getSavedSnippets();
+            list.push({ name, cmd });
+            localStorage.setItem('kterm_snippets', JSON.stringify(list));
+            openSnippetsModal();
+        }
+
+        function deleteSnippet(idx) {
+            const list = getSavedSnippets();
+            list.splice(idx, 1);
+            localStorage.setItem('kterm_snippets', JSON.stringify(list));
+            openSnippetsModal();
+        }
+    </script>
 </body>
 </html>

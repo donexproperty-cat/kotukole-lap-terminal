@@ -37,10 +37,15 @@ let authToken = localStorage.getItem('kterm_lap_token') || '';
 function normalizeMediaUrl(url) {
     if (!url) return '';
     if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('http://') || url.startsWith('https://')) return url;
-    if (url.startsWith('/lap/')) return url;
-    if (url.startsWith('/uploads/')) return '/lap' + url;
-    if (url.startsWith('uploads/')) return '/lap/' + url;
-    return '/lap/' + url.replace(/^\/+/, '');
+    let finalUrl = url;
+    if (url.startsWith('/lap/')) finalUrl = url;
+    else if (url.startsWith('/uploads/')) finalUrl = '/lap' + url;
+    else if (url.startsWith('uploads/')) finalUrl = '/lap/' + url;
+    else finalUrl = '/lap/' + url.replace(/^\/+/, '');
+    if (authToken && finalUrl.includes('/uploads/') && !finalUrl.includes('token=')) {
+        finalUrl += (finalUrl.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(authToken);
+    }
+    return finalUrl;
 }
 
 async function checkAuth() {

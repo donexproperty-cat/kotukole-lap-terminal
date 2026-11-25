@@ -1,4 +1,5 @@
 const http = require('http');
+const https = require('https');
 const { spawn, execSync } = require('child_process');
 const os = require('os');
 const fs = require('fs');
@@ -91,6 +92,7 @@ function recordFailedLogin(ip) {
     if (record.count >= MAX_FAILED_ATTEMPTS) {
         record.lockedUntil = now + LOCKOUT_MS;
         console.warn(`[SECURITY ALERT] IP ${ip} temporarily locked out after ${record.count} failed login attempts.`);
+        sendAlert('🔒 K-Term Security Alert', `IP ${ip} locked out for 15 minutes after ${record.count} failed login attempts.`);
     }
     loginAttempts.set(ip, record);
 }
@@ -155,9 +157,81 @@ setInterval(() => {
     });
 }, 15000);
 
+// Security & Alert Configuration (all optional in .env for backwards compatibility)
+const AGENT_SECRET = (process.env.AGENT_SECRET || '').trim();
+const GITHUB_WEBHOOK_SECRET = (process.env.GITHUB_WEBHOOK_SECRET || '').trim();
+const PROTECT_UPLOADS = (process.env.PROTECT_UPLOADS || '').trim().toLowerCase() === 'true';
+const TELEGRAM_BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
+const TELEGRAM_CHAT_ID = (process.env.TELEGRAM_CHAT_ID || '').trim();
+const DISCORD_WEBHOOK_URL = (process.env.DISCORD_WEBHOOK_URL || '').trim();
+
+function isAuthorizedAgent(req, parsedUrl) {
+    if (!AGENT_SECRET) return true;
+    const provided = (req.headers['x-agent-secret'] || parsedUrl.searchParams.get('secret') || '').toString();
+    return verifyPassword(provided, AGENT_SECRET);
+}
+
+function verifyGithubSignature(rawBody, signatureHeader) {
+    if (!GITHUB_WEBHOOK_SECRET) return true;
+    if (!signatureHeader || !signatureHeader.startsWith('sha256=')) return false;
+    const expected = 'sha256=' + crypto.createHmac('sha256', GITHUB_WEBHOOK_SECRET).update(rawBody).digest('hex');
+    const a = Buffer.from(signatureHeader, 'utf8');
+    const b = Buffer.from(expected, 'utf8');
+    if (a.length !== b.length) return false;
+    return crypto.timingSafeEqual(a, b);
+}
+
+function sendAlert(title, message) {
+    const text = `${title}\n${message}`;
+    if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
+        try {
+            const payload = JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text });
+            const req = https.request({
+                hostname: 'api.telegram.org',
+                path: `/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
+            });
+            req.on('error', () => {});
+            req.write(payload);
+            req.end();
+        } catch (e) {}
+    }
+    if (DISCORD_WEBHOOK_URL) {
+        try {
+            const url = new URL(DISCORD_WEBHOOK_URL);
+            const payload = JSON.stringify({ content: `**${title}**\n${message}` });
+            const req = https.request({
+                hostname: url.hostname,
+                port: url.port || 443,
+                path: url.pathname + url.search,
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
+            });
+            req.on('error', () => {});
+            req.write(payload);
+            req.end();
+        } catch (e) {}
+    }
+}
+
+// Staged file transfers for File Manager (web <-> agent behind NAT)
+const stagedFiles = new Map(); // id -> { name, buffer, mime, createdAt }
+const uploadAnyMiddleware = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 25 * 1024 * 1024 }
+}).single('file');
+
+setInterval(() => {
+    const cutoff = Date.now() - 10 * 60 * 1000;
+    for (const [id, item] of stagedFiles.entries()) {
+        if (item.createdAt < cutoff) stagedFiles.delete(id);
+    }
+}, 60 * 1000);
+
 // Active auth sessions (persisted to disk across restarts)
 const sessions = new Map();
-const SESSIONS_FILE = '/tmp/lap_sessions.json';
+const SESSIONS_FILE = path.join(os.tmpdir(), 'lap_sessions.json');
 
 function loadSessions() {
     try {
@@ -225,20 +299,45 @@ setInterval(() => {
     }
 }, 60 * 1000);
 
-// Laptop Agent State
-let connectedAgent = null; // { hostname, user, os, cores, lastSeen }
-let pendingCommands = [];  // [ { id, cmd, resolve, assigned, timer } ]
+// Laptop Agent State (Supports single default + multi-device tracking)
+let connectedAgent = null; // { deviceId, hostname, user, os, cores, lastSeen, ... }
+const connectedAgents = new Map(); // deviceId -> agentInfo
+let pendingCommands = [];  // [ { id, cmd, deviceId, resolve, assigned, timer } ]
 let lastWebcamPoll = 0;
 
-function isAgentOnline() {
-    return connectedAgent && (Date.now() - connectedAgent.lastSeen < 7000);
+function isAgentOnline(deviceId) {
+    if (deviceId) {
+        const dev = connectedAgents.get(deviceId);
+        return !!(dev && (Date.now() - dev.lastSeen < 7000));
+    }
+    return !!(connectedAgent && (Date.now() - connectedAgent.lastSeen < 7000));
 }
+
+function getActiveAgent(deviceId) {
+    if (deviceId && connectedAgents.has(deviceId)) {
+        const dev = connectedAgents.get(deviceId);
+        if (Date.now() - dev.lastSeen < 7000) return { ...dev, online: true };
+    }
+    if (isAgentOnline()) return { ...connectedAgent, online: true };
+    return null;
+}
+
+// Periodically detect offline agents for alerts
+setInterval(() => {
+    const now = Date.now();
+    for (const [id, dev] of connectedAgents.entries()) {
+        if (dev._onlineAlerted && now - dev.lastSeen > 15000) {
+            dev._onlineAlerted = false;
+            sendAlert('🔴 K-Term Agent Offline', `Device: ${dev.hostname} (${dev.user})`);
+        }
+    }
+}, 5000);
 
 function isWebcamAgentOnline() {
     return (Date.now() - lastWebcamPoll < 12000);
 }
 
-function getSystemStats() {
+function getSystemStats(requestedDeviceId) {
     const totalMem = os.totalmem();
     const freeMem = os.freemem();
     const usedMem = totalMem - freeMem;
@@ -248,15 +347,15 @@ function getSystemStats() {
     const cpuModel = cpus.length > 0 ? cpus[0].model : 'Unknown CPU';
     const cpuCores = cpus.length;
 
-    let diskInfo = 'N/A';
-    try {
-        const dfOut = execSync("df -h / | awk 'NR==2 {print $2, $3, $4, $5}'", { encoding: 'utf8' }).trim();
-        const parts = dfOut.split(/\s+/);
-        if (parts.length >= 4) {
-            diskInfo = { total: parts[0], used: parts[1], free: parts[2], pct: parts[3] };
-        }
-    } catch (e) {
-        diskInfo = { total: '?', used: '?', free: '?', pct: '?' };
+    let diskInfo = { total: '?', used: '?', free: '?', pct: '?' };
+    if (process.platform !== 'win32') {
+        try {
+            const dfOut = execSync("df -h / | awk 'NR==2 {print $2, $3, $4, $5}'", { encoding: 'utf8' }).trim();
+            const parts = dfOut.split(/\s+/);
+            if (parts.length >= 4) {
+                diskInfo = { total: parts[0], used: parts[1], free: parts[2], pct: parts[3] };
+            }
+        } catch (e) {}
     }
 
     const uptimeSec = os.uptime();
@@ -265,8 +364,23 @@ function getSystemStats() {
     const minutes = Math.floor((uptimeSec % 3600) / 60);
     const uptimeStr = `${days}d ${hours}h ${minutes}m`;
 
+    const now = Date.now();
+    const agentsList = [];
+    for (const [id, dev] of connectedAgents.entries()) {
+        if (now - dev.lastSeen < 60000) {
+            agentsList.push({
+                deviceId: id,
+                hostname: dev.hostname,
+                user: dev.user,
+                os: dev.os,
+                online: (now - dev.lastSeen < 7000)
+            });
+        }
+    }
+
     return {
-        agent: isAgentOnline() ? { ...connectedAgent, online: true } : null,
+        agent: getActiveAgent(requestedDeviceId),
+        agents: agentsList,
         webcamAgent: isWebcamAgentOnline() ? { online: true, lastSeen: lastWebcamPoll } : null,
         hostname: os.hostname(),
         platform: `${os.type()} ${os.release()} (${os.arch()})`,
@@ -367,6 +481,10 @@ const server = http.createServer((req, res) => {
 
     // Webcam Agent Polling (GET /api/poll)
     if (req.method === 'GET' && pathname === '/api/poll') {
+        if (!isAuthorizedAgent(req, parsedUrl)) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Unauthorized agent' }));
+        }
         lastWebcamPoll = Date.now();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (agentCommandQueue.length > 0) {
@@ -380,6 +498,10 @@ const server = http.createServer((req, res) => {
 
     // Webcam Photo Upload Endpoint (POST /api/upload-webcam)
     if (req.method === 'POST' && pathname === '/api/upload-webcam') {
+        if (!isAuthorizedAgent(req, parsedUrl)) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ success: false, error: 'Unauthorized agent' }));
+        }
         uploadWebcamMiddleware(req, res, (err) => {
             if (err) {
                 res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -411,14 +533,25 @@ const server = http.createServer((req, res) => {
 
     // Agent Poll Endpoint: Heartbeat & Command Fetching
     if (req.method === 'POST' && pathname === '/api/agent/poll') {
+        if (!isAuthorizedAgent(req, parsedUrl)) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Unauthorized agent' }));
+        }
         let body = '';
         req.on('data', chunk => body += chunk);
         req.on('end', () => {
             try {
                 const data = JSON.parse(body || '{}');
-                connectedAgent = {
-                    hostname: data.hostname || 'Physical Laptop',
-                    user: data.user || 'User',
+                const hostname = data.hostname || 'Physical Laptop';
+                const user = data.user || 'User';
+                const deviceId = data.deviceId || `${hostname}@${user}`;
+                const prev = connectedAgents.get(deviceId);
+                const wasOnline = prev && prev._onlineAlerted;
+
+                const agentInfo = {
+                    deviceId,
+                    hostname,
+                    user,
                     os: data.os || 'Windows',
                     cores: data.cores || '1',
                     cpuModel: data.cpuModel || '',
@@ -428,11 +561,22 @@ const server = http.createServer((req, res) => {
                     diskTotal: data.diskTotal || '',
                     diskFree: data.diskFree || '',
                     diskPercent: data.diskPercent || '',
-                    lastSeen: Date.now()
+                    battery: data.battery || '',
+                    batteryStatus: data.batteryStatus || '',
+                    cpuTemp: data.cpuTemp || '',
+                    lastSeen: Date.now(),
+                    _onlineAlerted: true
                 };
 
-                // Check if any command is queued for execution
-                const nextCmd = pendingCommands.find(c => !c.assigned);
+                connectedAgents.set(deviceId, agentInfo);
+                connectedAgent = agentInfo;
+
+                if (!wasOnline) {
+                    sendAlert('🟢 K-Term Agent Online', `Device: ${hostname} (${user})\nOS: ${agentInfo.os}`);
+                }
+
+                // Check if any command is queued for execution (matching deviceId or unassigned)
+                const nextCmd = pendingCommands.find(c => !c.assigned && (!c.deviceId || c.deviceId === deviceId));
                 if (nextCmd) {
                     nextCmd.assigned = true;
                     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -451,6 +595,10 @@ const server = http.createServer((req, res) => {
 
     // Agent Result Endpoint: Laptop returns stdout/stderr
     if (req.method === 'POST' && pathname === '/api/agent/result') {
+        if (!isAuthorizedAgent(req, parsedUrl)) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ success: false, error: 'Unauthorized agent' }));
+        }
         let body = '';
         req.on('data', chunk => body += chunk);
         req.on('end', () => {
@@ -476,6 +624,104 @@ const server = http.createServer((req, res) => {
     }
 
     // ==========================================
+    // FILE MANAGER TRANSFER ENDPOINTS (NAT-SAFE)
+    // ==========================================
+
+    // Web UI stages a file to be downloaded by the laptop agent
+    if (req.method === 'POST' && pathname === '/api/files/stage') {
+        const authHdr = req.headers['authorization'] || '';
+        const tok = authHdr.replace(/^Bearer\s+/i, '') || parsedUrl.searchParams.get('token');
+        if (!isValidSession(tok)) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ success: false, error: 'Unauthorized' }));
+        }
+        uploadAnyMiddleware(req, res, (err) => {
+            if (err || !req.file) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: false, error: err ? err.message : 'No file uploaded' }));
+            }
+            const fileId = crypto.randomBytes(12).toString('hex');
+            stagedFiles.set(fileId, {
+                name: path.basename(req.file.originalname || 'upload.bin'),
+                buffer: req.file.buffer,
+                mime: req.file.mimetype || 'application/octet-stream',
+                createdAt: Date.now()
+            });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, fileId, name: path.basename(req.file.originalname || 'upload.bin'), size: req.file.size }));
+        });
+        return;
+    }
+
+    // Laptop agent fetches a staged file
+    const agentFileMatch = pathname.match(/^\/api\/agent\/file\/([a-f0-9]+)$/);
+    if (req.method === 'GET' && agentFileMatch) {
+        if (!isAuthorizedAgent(req, parsedUrl)) {
+            res.writeHead(401, { 'Content-Type': 'text/plain' });
+            return res.end('Unauthorized');
+        }
+        const item = stagedFiles.get(agentFileMatch[1]);
+        if (!item) {
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            return res.end('File not found or expired');
+        }
+        res.writeHead(200, {
+            'Content-Type': item.mime,
+            'Content-Disposition': `attachment; filename="${item.name}"`,
+            'Content-Length': item.buffer.length
+        });
+        res.end(item.buffer);
+        return;
+    }
+
+    // Laptop agent uploads a requested file for the web user to download
+    if (req.method === 'POST' && pathname === '/api/agent/file-upload') {
+        if (!isAuthorizedAgent(req, parsedUrl)) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ success: false, error: 'Unauthorized' }));
+        }
+        uploadAnyMiddleware(req, res, (err) => {
+            if (err || !req.file) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: false, error: err ? err.message : 'No file' }));
+            }
+            const fileId = crypto.randomBytes(12).toString('hex');
+            stagedFiles.set(fileId, {
+                name: path.basename(req.file.originalname || 'download.bin'),
+                buffer: req.file.buffer,
+                mime: req.file.mimetype || 'application/octet-stream',
+                createdAt: Date.now()
+            });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, fileId, name: path.basename(req.file.originalname || 'download.bin') }));
+        });
+        return;
+    }
+
+    // Web UI downloads a file uploaded by the laptop agent
+    const webFileDlMatch = pathname.match(/^\/api\/files\/download\/([a-f0-9]+)$/);
+    if (req.method === 'GET' && webFileDlMatch) {
+        const authHdr = req.headers['authorization'] || '';
+        const tok = authHdr.replace(/^Bearer\s+/i, '') || parsedUrl.searchParams.get('token');
+        if (!isValidSession(tok)) {
+            res.writeHead(401, { 'Content-Type': 'text/plain' });
+            return res.end('Unauthorized');
+        }
+        const item = stagedFiles.get(webFileDlMatch[1]);
+        if (!item) {
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            return res.end('File not found or expired');
+        }
+        res.writeHead(200, {
+            'Content-Type': 'application/octet-stream',
+            'Content-Disposition': `attachment; filename="${item.name}"`,
+            'Content-Length': item.buffer.length
+        });
+        res.end(item.buffer);
+        return;
+    }
+
+    // ==========================================
     // GITHUB AUTO-DEPLOY & WEBHOOK ENDPOINTS
     // ==========================================
 
@@ -487,9 +733,16 @@ const server = http.createServer((req, res) => {
         }
 
         if (req.method === 'POST') {
-            let body = '';
-            req.on('data', chunk => body += chunk);
+            const chunks = [];
+            req.on('data', chunk => chunks.push(chunk));
             req.on('end', () => {
+                const rawBody = Buffer.concat(chunks);
+                const sig = req.headers['x-hub-signature-256'];
+                if (!verifyGithubSignature(rawBody, sig)) {
+                    console.warn('[GitHub Webhook] Invalid signature rejected.');
+                    res.writeHead(401, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ success: false, error: 'Invalid webhook signature' }));
+                }
                 const event = req.headers['x-github-event'] || 'push';
                 if (event === 'ping') {
                     console.log('[GitHub Webhook] Ping received from GitHub! Webhook is verified.');
@@ -586,8 +839,9 @@ const server = http.createServer((req, res) => {
             res.writeHead(401, { 'Content-Type': 'application/json' });
             return res.end(JSON.stringify({ error: 'Unauthorized' }));
         }
+        const deviceId = parsedUrl.searchParams.get('deviceId') || '';
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify(getSystemStats()));
+        return res.end(JSON.stringify(getSystemStats(deviceId)));
     }
 
     // API: Execute command with live SSE streaming
@@ -598,6 +852,7 @@ const server = http.createServer((req, res) => {
         }
 
         const cmd = parsedUrl.searchParams.get('cmd');
+        const targetDeviceId = parsedUrl.searchParams.get('deviceId') || '';
         if (!cmd) {
             res.writeHead(400, { 'Content-Type': 'text/plain' });
             return res.end('No command provided');
@@ -615,9 +870,11 @@ const server = http.createServer((req, res) => {
             res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
         };
 
+        const activeTarget = getActiveAgent(targetDeviceId);
+
         // IF PHYSICAL LAPTOP AGENT IS ONLINE -> EXECUTE ON LAPTOP!
-        if (isAgentOnline()) {
-            sendEvent('stdout', `[⚡ EXECUTING ON PHYSICAL LAPTOP (${connectedAgent.hostname}) via K-Term Agent]\n`);
+        if (activeTarget) {
+            sendEvent('stdout', `[⚡ EXECUTING ON PHYSICAL LAPTOP (${activeTarget.hostname}) via K-Term Agent]\n`);
             
             const cmdId = crypto.randomBytes(8).toString('hex');
             const timer = setTimeout(() => {
@@ -633,6 +890,7 @@ const server = http.createServer((req, res) => {
             pendingCommands.push({
                 id: cmdId,
                 cmd: cmd,
+                deviceId: activeTarget.deviceId,
                 assigned: false,
                 timer: timer,
                 resolve: (output) => {
@@ -715,6 +973,10 @@ const server = http.createServer((req, res) => {
     // Serve Uploaded Media (/uploads/snap-xxx.jpg or /lap/uploads/snap-xxx.jpg)
     const uploadMatch = pathname.match(/^(?:\/lap)?\/uploads\/(.+)$/);
     if (uploadMatch) {
+        if (PROTECT_UPLOADS && !isValidSession(token)) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Unauthorized: Valid session token required' }));
+        }
         const imgName = path.basename(uploadMatch[1]);
         const imgPath = path.join(uploadDir, imgName);
         const resolvedPath = path.resolve(imgPath);

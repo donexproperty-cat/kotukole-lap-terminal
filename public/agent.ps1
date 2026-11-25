@@ -1,4 +1,4 @@
-# K-Term Laptop Agent (PowerShell Edition)
+﻿# K-Term Laptop Agent (PowerShell Edition)
 $host.UI.RawUI.WindowTitle = "K-Term ⚡ Physical Laptop Agent (PS)"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 [Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
@@ -7,9 +7,13 @@ Write-Host "=================================================================" -
 Write-Host "        ⚡ K-TERM PHYSICAL LAPTOP CONNECTOR (PS AGENT) ⚡       " -ForegroundColor Cyan
 Write-Host "=================================================================`n" -ForegroundColor Cyan
 
-$serverUrl = "https://kotukole.com/lap"
+$serverUrl = if ($env:KTERM_SERVER_URL) { $env:KTERM_SERVER_URL.TrimEnd('/') } else { "https://kotukole.com/lap" }
+$agentSecret = if ($env:KTERM_AGENT_SECRET) { $env:KTERM_AGENT_SECRET } else { "" }
+$agentHeaders = @{}
+if ($agentSecret) { $agentHeaders["X-Agent-Secret"] = $agentSecret }
 $hostname = $env:COMPUTERNAME
 $username = $env:USERNAME
+$deviceId = "$hostname@$username"
 $cores = [string]$env:NUMBER_OF_PROCESSORS
 $osName = [System.Environment]::OSVersion.ToString()
 
@@ -75,7 +79,27 @@ while ($true) {
             }
         } catch {}
 
+        # Battery & CPU Temp (best-effort)
+        $batteryPct = ""
+        $batteryStatus = ""
+        $cpuTemp = ""
+        try {
+            $bat = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($bat) {
+                $batteryPct = "$($bat.EstimatedChargeRemaining)%"
+                $batteryStatus = if ($bat.BatteryStatus -eq 2) { "Charging/AC" } else { "On Battery" }
+            }
+        } catch {}
+        try {
+            $tz = Get-CimInstance -Namespace "root\WMI" -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($tz -and $tz.CurrentTemperature) {
+                $c = [Math]::Round(($tz.CurrentTemperature / 10) - 273.15, 1)
+                if ($c -gt 0 -and $c -lt 125) { $cpuTemp = "${c}°C" }
+            }
+        } catch {}
+
         $bodyObj = @{
+            deviceId = $deviceId
             hostname = $hostname
             user = $username
             os = $osName
@@ -87,10 +111,13 @@ while ($true) {
             diskTotal = $diskTotal
             diskFree = $diskFree
             diskPercent = $diskPct
+            battery = $batteryPct
+            batteryStatus = $batteryStatus
+            cpuTemp = $cpuTemp
         }
         $jsonBody = $bodyObj | ConvertTo-Json -Compress
 
-        $pollResp = Invoke-RestMethod -Uri "$serverUrl/api/agent/poll" -Method Post -Body $jsonBody -ContentType "application/json" -TimeoutSec 10 -ErrorAction SilentlyContinue
+        $pollResp = Invoke-RestMethod -Uri "$serverUrl/api/agent/poll" -Method Post -Body $jsonBody -Headers $agentHeaders -ContentType "application/json" -TimeoutSec 10 -ErrorAction SilentlyContinue
 
         if ($pollResp -and $pollResp.id -and $pollResp.id -ne $lastHandledId) {
             $cmdId = $pollResp.id
@@ -113,7 +140,7 @@ while ($true) {
                 output = $output
             }
             $resJson = $resObj | ConvertTo-Json -Compress
-            Invoke-RestMethod -Uri "$serverUrl/api/agent/result" -Method Post -Body $resJson -ContentType "application/json" -TimeoutSec 10 -ErrorAction SilentlyContinue | Out-Null
+            Invoke-RestMethod -Uri "$serverUrl/api/agent/result" -Method Post -Body $resJson -Headers $agentHeaders -ContentType "application/json" -TimeoutSec 10 -ErrorAction SilentlyContinue | Out-Null
             
             $timeDone = (Get-Date).ToString("HH:mm:ss")
             Write-Host "[$timeDone] [RESULT SENT BACK TO WEB CONSOLE]" -ForegroundColor Green
