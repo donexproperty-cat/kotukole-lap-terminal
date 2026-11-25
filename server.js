@@ -578,7 +578,7 @@ const server = http.createServer((req, res) => {
     // Agent Version Endpoint (for Auto-OTA checks)
     if (req.method === 'GET' && pathname === '/api/agent/version') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ version: '1.4.3' }));
+        return res.end(JSON.stringify({ version: '1.5.0' }));
     }
 
     // Agent Poll Endpoint: Heartbeat & Command Fetching
@@ -907,6 +907,49 @@ const server = http.createServer((req, res) => {
     // Auth Middleware for protected endpoints
     const authHeader = req.headers['authorization'] || '';
     const token = authHeader.replace(/^Bearer\s+/i, '') || parsedUrl.searchParams.get('token');
+
+    // API: Reverse Local Port Tunnel (Fetch http://host:port/path via Laptop Agent)
+    if (req.method === 'GET' && pathname === '/api/tunnel/fetch') {
+        const authHdr = req.headers['authorization'] || '';
+        const tok = authHdr.replace(/^Bearer\s+/i, '') || parsedUrl.searchParams.get('token');
+        if (!isValidSession(tok)) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Unauthorized' }));
+        }
+        const targetHost = (parsedUrl.searchParams.get('host') || '127.0.0.1').replace(/[^a-zA-Z0-9.\-]/g, '');
+        const targetPort = parseInt(parsedUrl.searchParams.get('port') || '80', 10);
+        const targetPath = (parsedUrl.searchParams.get('path') || '/').replace(/["`$]/g, '');
+        const targetDeviceId = parsedUrl.searchParams.get('deviceId') || '';
+        const activeTarget = getActiveAgent(targetDeviceId);
+        if (!activeTarget || !targetPort || targetPort < 1 || targetPort > 65535) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Agent offline or invalid port' }));
+        }
+        const url = `http://${targetHost}:${targetPort}${targetPath.startsWith('/') ? targetPath : '/' + targetPath}`;
+        const ps = `try { $r = Invoke-WebRequest -Uri '${url}' -UseBasicParsing -TimeoutSec 10; Write-Output $r.Content } catch { Write-Output ('ERR:' + $_.Exception.Message) }`;
+        const b64 = Buffer.from(ps, 'utf16le').toString('base64');
+        const cmdId = crypto.randomBytes(8).toString('hex');
+        const timer = setTimeout(() => {
+            const idx = pendingCommands.findIndex(c => c.id === cmdId);
+            if (idx !== -1) {
+                pendingCommands.splice(idx, 1);
+                res.writeHead(504, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Tunnel request timed out' }));
+            }
+        }, 15000);
+        pendingCommands.push({
+            id: cmdId,
+            cmd: `powershell -NoProfile -ExecutionPolicy Bypass -enc ${b64}`,
+            deviceId: activeTarget.deviceId,
+            assigned: false,
+            timer,
+            resolve: (output) => {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, url, body: output }));
+            }
+        });
+        return;
+    }
 
     // API: Audit Logs
     if (pathname === '/api/audit') {

@@ -1338,6 +1338,9 @@
                 <button class="btn-chip" onclick="sendWolDialog()" title="Send Wake-on-LAN Magic Packet to another PC" style="border-color: rgba(250, 204, 21, 0.4); color: #facc15;">
                     ⚡ Wake LAN
                 </button>
+                <button class="btn-chip" onclick="openPortTunnelModal()" title="Access localhost or LAN HTTP services on the laptop" style="border-color: rgba(56, 189, 248, 0.4); color: #38bdf8;">
+                    🌐 Port Tunnel
+                </button>
             </div>
             <div class="actions-group">
                 <button class="btn-chip btn-chip-red" onclick="clearTerminal()" title="Clear terminal screen">
@@ -1362,6 +1365,9 @@
                 <div class="terminal-toolbar">
                     <button class="btn-term-tool" id="btn-split-live" onclick="toggleSplitLive()" title="Show Live Screen preview next to terminal">
                         🖥️ Split Live
+                    </button>
+                    <button class="btn-term-tool" onclick="openPsScriptModal()" title="Run multi-line PowerShell script">
+                        📜 PS Script
                     </button>
                     <button class="btn-term-tool" id="btn-order-toggle" onclick="toggleOutputOrder()" title="Newest command output at top">
                         ⬆️ Newest Top
@@ -1415,6 +1421,9 @@
                     <button class="btn-submit" id="btn-submit" onclick="submitCommand()">
                         <span id="submit-text">Run</span>
                         <span id="submit-spinner" class="spinner" style="display: none;"></span>
+                    </button>
+                    <button class="btn-submit" id="btn-stop-cmd" onclick="stopActiveCommand()" style="display:none;background:#dc2626;margin-left:6px;">
+                        ⏹️ Stop
                     </button>
                 </div>
             </div>
@@ -2208,6 +2217,8 @@ if ($rec -and (Test-Path $wavPath)) {
             submitBtn.disabled = true;
             submitText.innerText = 'Running...';
             submitSpinner.style.display = 'inline-block';
+            const stopBtn = document.getElementById('btn-stop-cmd');
+            if (stopBtn) stopBtn.style.display = 'inline-flex';
 
             const displayCmd = cmd.includes('WwBSAGUAZgBsAGUAYwB0AGkAbwBu') ? 'screenshot (Capturing laptop screen...)' :
                                cmd.includes('JAB0AGUAbQBwAEYAaQBsAGUAIAA9') ? 'webcam (Capturing laptop webcam photo...)' :
@@ -2222,6 +2233,7 @@ if ($rec -and (Test-Path $wavPath)) {
             let exitedNormally = false;
             const devQs = selectedDeviceId ? `&deviceId=${encodeURIComponent(selectedDeviceId)}` : '';
             const evtSource = new EventSource(`${API_BASE}/exec?cmd=${encodeURIComponent(cmd)}&token=${encodeURIComponent(authToken)}${devQs}`);
+            window.activeEvtSource = evtSource;
 
             evtSource.addEventListener('stdout', (e) => {
                 const text = JSON.parse(e.data);
@@ -2235,10 +2247,13 @@ if ($rec -and (Test-Path $wavPath)) {
 
             const finishExecution = () => {
                 try { evtSource.close(); } catch(e) {}
+                window.activeEvtSource = null;
                 isRunningCommand = false;
                 submitBtn.disabled = false;
                 submitText.innerText = 'Run';
                 submitSpinner.style.display = 'none';
+                const stopBtn = document.getElementById('btn-stop-cmd');
+                if (stopBtn) stopBtn.style.display = 'none';
                 cmdInput.focus({ preventScroll: true });
             };
 
@@ -3268,6 +3283,70 @@ $udp.Close()
 Write-Output "WoL Magic Packet sent to $mac"`;
             const res = await execPsQuiet(ps);
             appendOutput(`⚡ [Wake-on-LAN] ${res.out || 'Packet sent'}`, 'out');
+        }
+
+        // 25. STOP ACTIVE COMMAND, MULTI-LINE PS SCRIPT RUNNER & REVERSE PORT TUNNEL
+        function stopActiveCommand() {
+            if (window.activeEvtSource) {
+                try { window.activeEvtSource.close(); } catch (e) {}
+                window.activeEvtSource = null;
+            }
+            isRunningCommand = false;
+            submitBtn.disabled = false;
+            submitText.innerText = 'Run';
+            submitSpinner.style.display = 'none';
+            const stopBtn = document.getElementById('btn-stop-cmd');
+            if (stopBtn) stopBtn.style.display = 'none';
+            appendOutput('\n[⏹️ Command cancelled by user]', 'err');
+        }
+
+        function openPsScriptModal() {
+            if (!isLaptopOnline) { alert('PowerShell Script Runner requires Physical Laptop Agent.'); return; }
+            openFeatureModal('📜', 'Multi-line PowerShell Runner', 'Execute full PowerShell blocks cleanly', `
+                <div style="display:grid;gap:10px;">
+                    <textarea id="ps-multi-box" rows="9" placeholder="# Enter multi-line PowerShell script..." style="width:100%;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:8px;padding:10px;font-family:monospace;"></textarea>
+                    <button class="btn-chip" style="border-color:rgba(56,189,248,0.5);color:#38bdf8;padding:8px;" onclick="runMultiLinePs()">▶ Run PowerShell Script</button>
+                </div>`);
+        }
+
+        function runMultiLinePs() {
+            const script = (document.getElementById('ps-multi-box').value || '').trim();
+            if (!script) return;
+            closeFeatureModal();
+            cmdInput.value = 'powershell -NoProfile -ExecutionPolicy Bypass -enc ' + encodePsBase64(script);
+            submitCommand();
+        }
+
+        function openPortTunnelModal() {
+            if (!isLaptopOnline) { alert('Port Tunnel requires Physical Laptop Agent.'); return; }
+            openFeatureModal('🌐', 'Reverse Local Port Tunnel', 'Fetch localhost or LAN HTTP services via laptop', `
+                <div style="display:grid;gap:10px;">
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <input id="tun-host" value="127.0.0.1" placeholder="Host (127.0.0.1)" style="flex:1;min-width:120px;background:#0f172a;color:#fff;border:1px solid #334155;border-radius:6px;padding:6px 10px;">
+                        <input id="tun-port" value="3000" placeholder="Port" style="width:90px;background:#0f172a;color:#fff;border:1px solid #334155;border-radius:6px;padding:6px 10px;">
+                        <input id="tun-path" value="/" placeholder="Path (/)" style="flex:1;min-width:100px;background:#0f172a;color:#fff;border:1px solid #334155;border-radius:6px;padding:6px 10px;">
+                        <button class="btn-chip" onclick="fetchPortTunnel()">🌐 Fetch</button>
+                    </div>
+                    <pre id="tun-result" style="background:#0f172a;padding:10px;border-radius:8px;color:#cbd5e1;font-size:0.76rem;max-height:48vh;overflow:auto;">Enter a host/port (e.g. 127.0.0.1:3000 or 192.168.1.1:80) and click Fetch.</pre>
+                </div>`);
+        }
+
+        async function fetchPortTunnel() {
+            const host = encodeURIComponent(document.getElementById('tun-host').value || '127.0.0.1');
+            const port = encodeURIComponent(document.getElementById('tun-port').value || '80');
+            const path = encodeURIComponent(document.getElementById('tun-path').value || '/');
+            const devQs = selectedDeviceId ? `&deviceId=${encodeURIComponent(selectedDeviceId)}` : '';
+            const outEl = document.getElementById('tun-result');
+            if (outEl) outEl.innerText = '⏳ Fetching via laptop tunnel...';
+            try {
+                const res = await fetch(`${API_BASE}/tunnel/fetch?host=${host}&port=${port}&path=${path}${devQs}`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                const data = await res.json();
+                if (outEl) outEl.innerText = data.body || data.error || 'Empty response';
+            } catch (e) {
+                if (outEl) outEl.innerText = 'Tunnel error: ' + e.message;
+            }
         }
     </script>
 </body>

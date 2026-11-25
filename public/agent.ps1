@@ -1,6 +1,6 @@
-# K-Term Laptop Agent (PowerShell Edition v1.4.3)
+# K-Term Laptop Agent (PowerShell Edition v1.5.0)
 # Compatible with both `irm ... | iex` and direct `.ps1` execution
-$AgentVersion = "1.4.3"
+$AgentVersion = "1.5.0"
 $Uninstall  = ($args -contains '-Uninstall')  -or ($env:KTERM_ACTION -eq 'uninstall')
 $Status     = ($args -contains '-Status')     -or ($env:KTERM_ACTION -eq 'status')
 $Logs       = ($args -contains '-Logs')       -or ($env:KTERM_ACTION -eq 'logs')
@@ -164,10 +164,34 @@ $lastHandledId = ""
 $currentWorkDir = (Get-Location).Path
 $script:backoffSec = 1
 $lastOtaCheck = [DateTime]::MinValue
+$script:trayIcon = $null
+
+# Optional Windows System Tray Icon when running in background
+if ($PSCommandPath) {
+    try {
+        $tray = New-Object System.Windows.Forms.NotifyIcon
+        $tray.Icon = [System.Drawing.SystemIcons]::Information
+        $tray.Text = "K-Term Agent v$AgentVersion ($hostname)"
+        $menu = New-Object System.Windows.Forms.ContextMenuStrip
+        $miLog = $menu.Items.Add("Open Agent Log")
+        $miLog.Add_Click({ Start-Process notepad.exe "`"$logPath`"" })
+        $miExit = $menu.Items.Add("Exit K-Term Agent")
+        $miExit.Add_Click({
+            try { $tray.Visible = $false; $tray.Dispose() } catch {}
+            try { $mutex.ReleaseMutex(); $mutex.Dispose() } catch {}
+            [Environment]::Exit(0)
+        })
+        $tray.ContextMenuStrip = $menu
+        $tray.Visible = $true
+        $script:trayIcon = $tray
+    } catch {}
+}
 
 while ($true) {
+    if ($script:trayIcon) { try { [System.Windows.Forms.Application]::DoEvents() } catch {} }
     # Wait quietly if no network adapter/data is connected yet (works even hours later)
     while (-not ([System.Net.NetworkInformation.NetworkInterface]::GetIsNetworkAvailable())) {
+        if ($script:trayIcon) { try { [System.Windows.Forms.Application]::DoEvents() } catch {} }
         Start-Sleep -Seconds 3
     }
 
