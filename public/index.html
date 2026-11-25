@@ -420,6 +420,37 @@
             gap: 8px;
         }
 
+        /* Side-by-Side Workspace Split (Sticky Quick-Run Sidebar + Terminal) */
+        .workspace-split {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        @media (min-width: 1024px) {
+            .workspace-split {
+                display: grid;
+                grid-template-columns: 320px 1fr;
+                gap: 14px;
+                align-items: start;
+            }
+            .workspace-split .actions-panel {
+                position: sticky;
+                top: 14px;
+                max-height: calc(100vh - 95px);
+                overflow-y: auto;
+            }
+            .workspace-split .terminal-box {
+                min-height: 560px;
+            }
+        }
+
+        .term-run-block {
+            border-bottom: 1px dashed rgba(148, 163, 184, 0.16);
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+        }
+
         .actions-group {
             display: flex;
             align-items: center;
@@ -1174,6 +1205,8 @@
             </div>
         </div>
 
+        <!-- Workspace Split: Sticky Quick-Run Sidebar + Terminal -->
+        <div class="workspace-split">
         <!-- Quick Action Bar -->
         <div class="actions-panel">
             <div class="actions-toolbar">
@@ -1312,6 +1345,9 @@
                     Session: <span id="term-user-host">Connecting...</span>
                 </div>
                 <div class="terminal-toolbar">
+                    <button class="btn-term-tool" id="btn-order-toggle" onclick="toggleOutputOrder()" title="Newest command output at top">
+                        ⬆️ Newest Top
+                    </button>
                     <button class="btn-term-tool" onclick="copyTerminalOutput()" title="Copy all output">
                         📋 Copy Output
                     </button>
@@ -1357,6 +1393,7 @@
                     </button>
                 </div>
             </div>
+        </div>
         </div>
 
     </div>
@@ -1752,7 +1789,7 @@
                     <a href="${imgUrl}" download="kterm-screenshot-${Date.now()}.jpg" class="btn-chip" style="text-decoration:none;">⬇️ Download (.JPG)</a>
                 </div>
             `;
-            outputEl.appendChild(card);
+            getTargetContainer().appendChild(card);
         }
 
         // Webcam Capture Helpers
@@ -1842,7 +1879,7 @@
                     <a href="${imgUrl}" download="kterm-webcam-${Date.now()}.jpg" class="btn-chip" style="text-decoration:none;">⬇️ Download (.JPG)</a>
                 </div>
             `;
-            outputEl.appendChild(card);
+            getTargetContainer().appendChild(card);
         }
 
         // Audio Recording Helpers
@@ -1940,7 +1977,7 @@ if ($rec -and (Test-Path $wavPath)) {
                     </button>
                 </div>
             `;
-            outputEl.appendChild(card);
+            getTargetContainer().appendChild(card);
         }
 
         document.addEventListener('keydown', (e) => {
@@ -1967,8 +2004,29 @@ if ($rec -and (Test-Path $wavPath)) {
             cmdInput.focus();
         }
 
+        let newestFirst = true;
+        let activeRunBlock = null;
+
+        function toggleOutputOrder() {
+            newestFirst = !newestFirst;
+            const btn = document.getElementById('btn-order-toggle');
+            if (btn) btn.innerText = newestFirst ? '⬆️ Newest Top' : '⬇️ Classic Bottom';
+        }
+
+        function getTargetContainer() {
+            if (newestFirst && activeRunBlock) return activeRunBlock;
+            return outputEl;
+        }
+
         // Append to Output
         function appendOutput(text, type = 'out') {
+            if (type === 'cmd' && newestFirst) {
+                activeRunBlock = document.createElement('div');
+                activeRunBlock.className = 'term-run-block';
+                outputEl.prepend(activeRunBlock);
+            }
+            const container = getTargetContainer();
+
             if (typeof text === 'string' && (text.includes('==KTERM_SCREENSHOT==') || text.includes('==KOTUKOLE_SCREENSHOT=='))) {
                 const match = text.match(/==(?:KTERM|KOTUKOLE)_SCREENSHOT==([\s\S]*?)==END_SCREENSHOT==/);
                 if (match) {
@@ -1980,11 +2038,11 @@ if ($rec -and (Test-Path $wavPath)) {
                         const extra = document.createElement('div');
                         extra.className = 'term-out-text';
                         extra.innerText = cleanText;
-                        outputEl.appendChild(extra);
+                        container.appendChild(extra);
                     }
                     renderScreenshotCard(imgUrl);
                     openScreenshotModal(imgUrl);
-                    outputEl.scrollTop = outputEl.scrollHeight;
+                    outputEl.scrollTop = newestFirst ? 0 : outputEl.scrollHeight;
                     return;
                 }
             }
@@ -2000,11 +2058,11 @@ if ($rec -and (Test-Path $wavPath)) {
                         const extra = document.createElement('div');
                         extra.className = 'term-out-text';
                         extra.innerText = cleanText;
-                        outputEl.appendChild(extra);
+                        container.appendChild(extra);
                     }
                     renderWebcamCard(imgUrl);
                     openWebcamModal(imgUrl);
-                    outputEl.scrollTop = outputEl.scrollHeight;
+                    outputEl.scrollTop = newestFirst ? 0 : outputEl.scrollHeight;
                     return;
                 }
             }
@@ -2020,10 +2078,10 @@ if ($rec -and (Test-Path $wavPath)) {
                         const extra = document.createElement('div');
                         extra.className = 'term-out-text';
                         extra.innerText = cleanText;
-                        outputEl.appendChild(extra);
+                        container.appendChild(extra);
                     }
                     renderAudioCard(audioUrl);
-                    outputEl.scrollTop = outputEl.scrollHeight;
+                    outputEl.scrollTop = newestFirst ? 0 : outputEl.scrollHeight;
                     return;
                 }
             }
@@ -2039,8 +2097,8 @@ if ($rec -and (Test-Path $wavPath)) {
                 entry.innerText = text;
             }
 
-            outputEl.appendChild(entry);
-            outputEl.scrollTop = outputEl.scrollHeight;
+            container.appendChild(entry);
+            outputEl.scrollTop = newestFirst ? 0 : outputEl.scrollHeight;
         }
 
         function escapeHtml(str) {
@@ -2049,6 +2107,7 @@ if ($rec -and (Test-Path $wavPath)) {
 
         function clearTerminal() {
             outputEl.innerHTML = '';
+            activeRunBlock = null;
             appendOutput('[Screen cleared by user]');
         }
 
@@ -3000,7 +3059,7 @@ Write-Output "Cleanup Complete! Freed: $freedMB MB (DNS Cache Flushed)"`;
             Array.from(group.children).forEach(el => {
                 if (el.tagName === 'SPAN' && el.classList.contains('action-tag')) return;
                 const txt = (el.innerText || el.title || '').toLowerCase();
-                const cat = getToolCategory(txt);
+                const cat = el.id === 'mic-duration-select' ? 'media' : getToolCategory(txt);
                 const matchCat = (activeToolCat === 'all' || cat === activeToolCat);
                 const matchTxt = (!q || txt.includes(q));
                 el.style.display = (matchCat && matchTxt) ? '' : 'none';
