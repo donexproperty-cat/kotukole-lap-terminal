@@ -2001,7 +2001,7 @@ if ($rec -and (Test-Path $wavPath)) {
         // Insert suggested chip
         function insertCmd(c) {
             cmdInput.value = c;
-            cmdInput.focus();
+            cmdInput.focus({ preventScroll: true });
         }
 
         let newestFirst = true;
@@ -2116,7 +2116,7 @@ if ($rec -and (Test-Path $wavPath)) {
         }
 
         function focusInput() {
-            cmdInput.focus();
+            cmdInput.focus({ preventScroll: true });
         }
 
         function copyTerminalOutput() {
@@ -2210,7 +2210,7 @@ if ($rec -and (Test-Path $wavPath)) {
                 submitBtn.disabled = false;
                 submitText.innerText = 'Run';
                 submitSpinner.style.display = 'none';
-                cmdInput.focus();
+                cmdInput.focus({ preventScroll: true });
             };
 
             evtSource.addEventListener('exit', () => {
