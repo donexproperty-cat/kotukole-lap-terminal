@@ -95,55 +95,45 @@ if ($gpuName) { Write-Host "[*] Graphics (GPU)            : $gpuName" }
 Write-Host "[*] CPU Cores                 : $cores"
 Write-Host "[*] Operating OS              : $osName"
 
-# Ensure local copy & Windows Logon Auto-Startup (uses wscript.exe .vbs so Windows 11 Terminal never pops up)
+# Ensure Native C# Tray App (K-Term.exe) download & Windows Logon Auto-Startup (no .vbs needed!)
+$localExePath = Join-Path $configDir "K-Term.exe"
 $localAgentPath = Join-Path $configDir "agent.ps1"
-$vbsPath = Join-Path $configDir "run-hidden.vbs"
-if (-not $env:KTERM_NO_STARTUP) {
+if (-not $env:KTERM_NO_STARTUP -and -not $Foreground) {
     try {
         if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
-        $scriptSrc = $MyInvocation.MyCommand.ScriptContents
-        if ($scriptSrc) {
-            [System.IO.File]::WriteAllText($localAgentPath, $scriptSrc, (New-Object System.Text.UTF8Encoding($false)))
-        } elseif ($PSCommandPath -and (Test-Path $PSCommandPath)) {
-            Copy-Item $PSCommandPath $localAgentPath -Force
-        } else {
-            Invoke-WebRequest -Uri "$serverUrl/agent.ps1" -OutFile $localAgentPath -UseBasicParsing -ErrorAction SilentlyContinue
-        }
+        $exeUrl = "$serverUrl/K-Term.exe"
+        Invoke-WebRequest -Uri $exeUrl -OutFile $localExePath -UseBasicParsing -TimeoutSec 15 -ErrorAction Stop
 
-        $vbsCode = "CreateObject(`"Wscript.Shell`").Run `"powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"`"$localAgentPath`"`"`", 0, False"
-        [System.IO.File]::WriteAllText($vbsPath, $vbsCode, [System.Text.Encoding]::ASCII)
-
-        $regRunPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-        if (Test-Path $localAgentPath) {
+        if (Test-Path $localExePath) {
+            $regRunPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+            $exeArgs = "`"$serverUrl`""
+            if ($agentSecret) { $exeArgs += " `"$agentSecret`"" }
             try {
-                $action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"$vbsPath`""
+                $action = New-ScheduledTaskAction -Execute $localExePath -Argument $exeArgs
                 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
                 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 1)
-                Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description "K-Term Physical Laptop Agent" -Force -ErrorAction Stop | Out-Null
-                Write-Host "[+] Auto-Startup              : ENABLED (Hidden Background Task '$taskName')" -ForegroundColor Green
-                Write-AgentLog "Registered/Updated Hidden Scheduled Task '$taskName' -> $vbsPath"
+                Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description "K-Term Native Tray Agent" -Force -ErrorAction Stop | Out-Null
+                Write-Host "[+] Auto-Startup              : ENABLED (Native Task '$taskName')" -ForegroundColor Green
+                Write-AgentLog "Registered Native Scheduled Task '$taskName' -> $localExePath"
             } catch {
                 try {
-                    Set-ItemProperty -Path $regRunPath -Name $taskName -Value "wscript.exe `"$vbsPath`"" -Force -ErrorAction Stop
-                    Write-Host "[+] Auto-Startup              : ENABLED (Hidden User Startup '$taskName')" -ForegroundColor Green
-                    Write-AgentLog "Registered/Updated HKCU Run '$taskName' -> $vbsPath"
+                    Set-ItemProperty -Path $regRunPath -Name $taskName -Value "`"$localExePath`" $exeArgs" -Force -ErrorAction Stop
+                    Write-Host "[+] Auto-Startup              : ENABLED (Native User Startup '$taskName')" -ForegroundColor Green
+                    Write-AgentLog "Registered Native HKCU Run '$taskName' -> $localExePath"
                 } catch {
                     Write-Host "[!] Auto-Startup Setup        : Skipped ($($_.Exception.Message))" -ForegroundColor Yellow
                 }
             }
+
+            try { $mutex.ReleaseMutex(); $mutex.Dispose() } catch {}
+            Start-Process $localExePath -ArgumentList $exeArgs
+            Write-Host "`n[+] Status: NATIVE C# TRAY APP RUNNING IN BACKGROUND! You can safely close this window." -ForegroundColor Green
+            Write-Host "[+] Log File: $logPath`n" -ForegroundColor DarkGray
+            return
         }
     } catch {
-        Write-Host "[!] Auto-Startup Setup        : Skipped ($($_.Exception.Message))" -ForegroundColor Yellow
+        Write-Host "[!] Native K-Term.exe download skipped ($($_.Exception.Message)). Running PowerShell mode..." -ForegroundColor Yellow
     }
-}
-
-# If launched interactively via `irm ... | iex` (no $PSCommandPath), hand off to hidden wscript background process!
-if (-not $PSCommandPath -and -not $Foreground -and (Test-Path $vbsPath)) {
-    try { $mutex.ReleaseMutex(); $mutex.Dispose() } catch {}
-    Start-Process "wscript.exe" -ArgumentList "`"$vbsPath`""
-    Write-Host "`n[+] Status: RUNNING IN BACKGROUND! You can safely close this PowerShell window." -ForegroundColor Green
-    Write-Host "[+] Log File: $logPath`n" -ForegroundColor DarkGray
-    return
 }
 
 Write-Host "`n[+] Status: CONNECTED & LISTENING for commands from Server" -ForegroundColor Green
