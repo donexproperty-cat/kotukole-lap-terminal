@@ -1432,13 +1432,16 @@
 
                     document.getElementById('cpu-cores').innerText = `${stats.agent.cores} Cores`;
                     document.getElementById('cpu-badge').innerText = 'Physical PC';
-                    document.getElementById('cpu-model').innerText = stats.agent.cpuModel || 'Windows Processor';
+                    document.getElementById('cpu-model').innerText = (stats.agent.cpuModel || 'Windows Processor') + (stats.agent.gpu ? ` • GPU: ${stats.agent.gpu}` : '');
                     document.getElementById('os-name').innerText = stats.agent.os;
                     const batEl = document.getElementById('battery-temp-info');
                     if (batEl) {
                         const parts = [];
                         if (stats.agent.battery) parts.push(`🔋 ${stats.agent.battery}${stats.agent.batteryStatus ? ' (' + stats.agent.batteryStatus + ')' : ''}`);
                         if (stats.agent.cpuTemp) parts.push(`🌡️ ${stats.agent.cpuTemp}`);
+                        if (stats.agent.ssid) parts.push(`📶 ${stats.agent.ssid}`);
+                        if (stats.agent.usbDrives) parts.push(`💾 USB: ${stats.agent.usbDrives}`);
+                        if (stats.agent.pendingReboot) parts.push(`⚠️ Reboot Pending`);
                         if (parts.length > 0) {
                             batEl.innerText = parts.join('  •  ');
                             batEl.style.display = 'block';

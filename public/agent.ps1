@@ -1,17 +1,35 @@
-﻿# K-Term Laptop Agent (PowerShell Edition)
-$host.UI.RawUI.WindowTitle = "K-Term ⚡ Physical Laptop Agent (PS)"
+﻿# K-Term Laptop Agent (PowerShell Edition v1.3.0)
+$host.UI.RawUI.WindowTitle = "K-Term ⚡ Physical Laptop Agent (PS v1.3.0)"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 [Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
 
-Write-Host "=================================================================" -ForegroundColor Cyan
-Write-Host "        ⚡ K-TERM PHYSICAL LAPTOP CONNECTOR (PS AGENT) ⚡       " -ForegroundColor Cyan
-Write-Host "=================================================================`n" -ForegroundColor Cyan
+# Load / Save Local Config (%APPDATA%\KTerm\config.json)
+$configDir = Join-Path $env:APPDATA "KTerm"
+$configPath = Join-Path $configDir "config.json"
+$logDir = Join-Path $env:LOCALAPPDATA "KTerm"
+$logPath = Join-Path $logDir "agent.log"
+if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
 
-$serverUrl = if ($env:KTERM_SERVER_URL) { $env:KTERM_SERVER_URL.TrimEnd('/') } else { "https://kotukole.com/lap" }
-$agentSecret = if ($env:KTERM_AGENT_SECRET) { $env:KTERM_AGENT_SECRET } else { "" }
+function Write-AgentLog($msg) {
+    try {
+        if ((Test-Path $logPath) -and ((Get-Item $logPath).Length -gt 2MB)) {
+            Move-Item $logPath "$logPath.old" -Force -ErrorAction SilentlyContinue
+        }
+        $line = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $msg"
+        Add-Content -Path $logPath -Value $line -ErrorAction SilentlyContinue
+    } catch {}
+}
+
+$cfg = @{}
+if (Test-Path $configPath) {
+    try { $cfg = Get-Content $configPath -Raw | ConvertFrom-Json } catch {}
+}
+
+$serverUrl = if ($env:KTERM_SERVER_URL) { $env:KTERM_SERVER_URL.TrimEnd('/') } elseif ($cfg.ServerURL) { $cfg.ServerURL.TrimEnd('/') } else { "https://kotukole.com/lap" }
+$agentSecret = if ($env:KTERM_AGENT_SECRET) { $env:KTERM_AGENT_SECRET } elseif ($cfg.AgentSecret) { $cfg.AgentSecret } else { "" }
 $agentHeaders = @{}
 if ($agentSecret) { $agentHeaders["X-Agent-Secret"] = $agentSecret }
-$hostname = $env:COMPUTERNAME
+$hostname = if ($cfg.DeviceAlias) { $cfg.DeviceAlias } else { $env:COMPUTERNAME }
 $username = $env:USERNAME
 $deviceId = "$hostname@$username"
 $cores = [string]$env:NUMBER_OF_PROCESSORS
@@ -23,23 +41,43 @@ try {
     if ($regCpu) { $cpuModel = $regCpu.Trim() }
 } catch {}
 
+$gpuName = ""
+try {
+    $gpu = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($gpu -and $gpu.Name) { $gpuName = $gpu.Name.Trim() }
+} catch {}
+
+Write-Host "=================================================================" -ForegroundColor Cyan
+Write-Host "        ⚡ K-TERM PHYSICAL LAPTOP CONNECTOR (PS v1.3.0) ⚡       " -ForegroundColor Cyan
+Write-Host "=================================================================`n" -ForegroundColor Cyan
 Write-Host "[*] Connecting your laptop to : $serverUrl"
 Write-Host "[*] Machine Name              : $hostname"
 Write-Host "[*] User Name                 : $username"
 Write-Host "[*] Processor (CPU)           : $cpuModel"
+if ($gpuName) { Write-Host "[*] Graphics (GPU)            : $gpuName" }
 Write-Host "[*] CPU Cores                 : $cores"
 Write-Host "[*] Operating OS              : $osName"
 Write-Host "`n[+] Status: CONNECTED & LISTENING for commands from Server" -ForegroundColor Green
-Write-Host "[+] Keep this window open while using the web console.`n"
+Write-Host "[+] Log File: $logPath`n" -ForegroundColor DarkGray
+Write-AgentLog "Agent v1.3.0 started -> $serverUrl ($deviceId)"
+
+# Sleep / Wake event handler
+try {
+    Register-ObjectEvent -InputObject ([Microsoft.Win32.SystemEvents]) -EventName PowerModeChanged -Action {
+        if ($EventArgs.Mode -eq 'Resume') {
+            $script:backoffSec = 1
+        }
+    } | Out-Null
+} catch {}
 
 $lastHandledId = ""
+$currentWorkDir = (Get-Location).Path
+$script:backoffSec = 1
 
 while ($true) {
     try {
         # RAM Stats
-        $ramTotal = "Unknown"
-        $ramUsed = "Unknown"
-        $ramPct = "0"
+        $ramTotal = "Unknown"; $ramUsed = "Unknown"; $ramPct = "0"
         try {
             $osWmi = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
             if ($osWmi) {
@@ -53,9 +91,7 @@ while ($true) {
         } catch {}
 
         # Disk Stats
-        $diskTotal = "Unknown"
-        $diskFree = "Unknown"
-        $diskPct = "0%"
+        $diskTotal = "Unknown"; $diskFree = "Unknown"; $diskPct = "0%"
         try {
             $disks = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue
             if ($disks) {
@@ -67,22 +103,11 @@ while ($true) {
                 $diskTotal = "$totalGb GB ($($mainDisk.DeviceID))"
                 $diskFree = "$freeGb GB Free"
                 $diskPct = [string][Math]::Round(($usedGb / $totalGb) * 100) + "%"
-            } else {
-                $cDrive = Get-PSDrive C -ErrorAction SilentlyContinue
-                if ($cDrive) {
-                    $dTotal = [Math]::Round(($cDrive.Used + $cDrive.Free) / 1GB, 1)
-                    $dFree = [Math]::Round($cDrive.Free / 1GB, 1)
-                    $diskTotal = "$dTotal GB (C:)"
-                    $diskFree = "$dFree GB Free"
-                    $diskPct = [string][Math]::Round(($cDrive.Used / ($cDrive.Used + $cDrive.Free)) * 100) + "%"
-                }
             }
         } catch {}
 
-        # Battery & CPU Temp (best-effort)
-        $batteryPct = ""
-        $batteryStatus = ""
-        $cpuTemp = ""
+        # Battery, CPU Temp, Wi-Fi SSID, USB Drives, Pending Reboot, Top 5 Procs
+        $batteryPct = ""; $batteryStatus = ""; $cpuTemp = ""; $wifiSsid = ""; $usbStr = ""; $pendingReboot = $false; $topProcs = @()
         try {
             $bat = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($bat) {
@@ -97,14 +122,33 @@ while ($true) {
                 if ($c -gt 0 -and $c -lt 125) { $cpuTemp = "${c}°C" }
             }
         } catch {}
+        try {
+            $ssidLine = (netsh wlan show interfaces 2>$null | Select-String "^\s*SSID\s*:\s*(.+)$") | Select-Object -First 1
+            if ($ssidLine) { $wifiSsid = $ssidLine.Matches[0].Groups[1].Value.Trim() }
+        } catch {}
+        try {
+            $usb = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=2" -ErrorAction SilentlyContinue
+            if ($usb) { $usbStr = ($usb | ForEach-Object { $_.DeviceID }) -join "," }
+        } catch {}
+        try {
+            $pendingReboot = (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired")
+        } catch {}
+        try {
+            $topProcs = @(Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 5 | ForEach-Object { @{ name = $_.ProcessName; memMB = [Math]::Round($_.WorkingSet64 / 1MB, 1) } })
+        } catch {}
 
         $bodyObj = @{
             deviceId = $deviceId
-            version = "1.2.0"
+            version = "1.3.0"
             hostname = $hostname
             user = $username
             os = $osName
             cpuModel = $cpuModel
+            gpu = $gpuName
+            ssid = $wifiSsid
+            usbDrives = $usbStr
+            pendingReboot = $pendingReboot
+            topProcs = $topProcs
             cores = $cores
             ramTotal = $ramTotal
             ramUsed = $ramUsed
@@ -116,9 +160,10 @@ while ($true) {
             batteryStatus = $batteryStatus
             cpuTemp = $cpuTemp
         }
-        $jsonBody = $bodyObj | ConvertTo-Json -Compress
+        $jsonBody = $bodyObj | ConvertTo-Json -Depth 4 -Compress
 
-        $pollResp = Invoke-RestMethod -Uri "$serverUrl/api/agent/poll" -Method Post -Body $jsonBody -Headers $agentHeaders -ContentType "application/json" -TimeoutSec 10 -ErrorAction SilentlyContinue
+        $pollResp = Invoke-RestMethod -Uri "$serverUrl/api/agent/poll" -Method Post -Body $jsonBody -Headers $agentHeaders -ContentType "application/json" -TimeoutSec 10 -ErrorAction Stop
+        $script:backoffSec = 1
 
         if ($pollResp -and $pollResp.id -and $pollResp.id -ne $lastHandledId) {
             $cmdId = $pollResp.id
@@ -127,13 +172,24 @@ while ($true) {
 
             $timeStr = (Get-Date).ToString("HH:mm:ss")
             Write-Host "[$timeStr] [CMD RECEIVED] $cmd" -ForegroundColor Yellow
+            Write-AgentLog "CMD: $cmd"
 
             $output = ""
             try {
-                $output = cmd.exe /c $cmd 2>&1 | Out-String
-                if (-not $output) { $output = "(Command completed successfully with no output)" }
+                if ($cmd -match '^\s*cd\s+(.+)$') {
+                    $targetDir = $Matches[1].Trim().Trim('"')
+                    Push-Location $currentWorkDir
+                    Set-Location $targetDir -ErrorAction Stop
+                    $currentWorkDir = (Get-Location).Path
+                    Pop-Location
+                    $output = "Directory changed to: $currentWorkDir"
+                } else {
+                    $output = cmd.exe /c "cd /d `"$currentWorkDir`" && $cmd" 2>&1 | Out-String
+                    if (-not $output) { $output = "(Command completed successfully with no output)" }
+                }
             } catch {
                 $output = "[Execution Error]: " + $_.Exception.Message
+                Write-AgentLog "ERR: $($_.Exception.Message)"
             }
 
             $resObj = @{
@@ -142,13 +198,14 @@ while ($true) {
             }
             $resJson = $resObj | ConvertTo-Json -Compress
             Invoke-RestMethod -Uri "$serverUrl/api/agent/result" -Method Post -Body $resJson -Headers $agentHeaders -ContentType "application/json" -TimeoutSec 10 -ErrorAction SilentlyContinue | Out-Null
-            
+
             $timeDone = (Get-Date).ToString("HH:mm:ss")
             Write-Host "[$timeDone] [RESULT SENT BACK TO WEB CONSOLE]" -ForegroundColor Green
         }
     } catch {
-        # Silent retry
+        Write-AgentLog "Poll error: $($_.Exception.Message)"
+        $script:backoffSec = [Math]::Min(15, $script:backoffSec * 2)
     }
 
-    Start-Sleep -Seconds 1
+    Start-Sleep -Seconds $script:backoffSec
 }

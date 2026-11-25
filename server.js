@@ -575,6 +575,12 @@ const server = http.createServer((req, res) => {
     // AGENT ENDPOINTS (Called by K-Term Agent)
     // ==========================================
 
+    // Agent Version Endpoint (for Auto-OTA checks)
+    if (req.method === 'GET' && pathname === '/api/agent/version') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ version: '1.3.0' }));
+    }
+
     // Agent Poll Endpoint: Heartbeat & Command Fetching
     if (req.method === 'POST' && pathname === '/api/agent/poll') {
         if (!isAuthorizedAgent(req, parsedUrl)) {
@@ -600,6 +606,11 @@ const server = http.createServer((req, res) => {
                     cores: data.cores || '1',
                     version: data.version || '1.1.0',
                     cpuModel: data.cpuModel || '',
+                    gpu: data.gpu || '',
+                    ssid: data.ssid || '',
+                    pendingReboot: !!data.pendingReboot,
+                    topProcs: Array.isArray(data.topProcs) ? data.topProcs : [],
+                    usbDrives: data.usbDrives || '',
                     ramTotal: data.ramTotal || '',
                     ramUsed: data.ramUsed || '',
                     ramPercent: data.ramPercent || '',
@@ -613,6 +624,13 @@ const server = http.createServer((req, res) => {
                     _onlineAlerted: true,
                     _lastResourceAlert: prev ? (prev._lastResourceAlert || 0) : 0
                 };
+
+                if (prev && prev.usbDrives !== undefined && agentInfo.usbDrives !== prev.usbDrives) {
+                    sendAlert('🔌 K-Term USB Drive Change', `Device: ${hostname} (${user})\nDrives: ${agentInfo.usbDrives || 'None'}`);
+                }
+                if (prev && prev.ssid && agentInfo.ssid && agentInfo.ssid !== prev.ssid) {
+                    sendAlert('📶 K-Term Wi-Fi Changed', `Device: ${hostname} (${user})\n${prev.ssid} -> ${agentInfo.ssid}`);
+                }
 
                 // Resource Threshold Alerting (throttled to once per 15 mins per device)
                 const ramNum = parseFloat(agentInfo.ramPercent);
