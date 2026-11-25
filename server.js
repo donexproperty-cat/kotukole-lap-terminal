@@ -261,6 +261,7 @@ function sendAlert(title, message) {
 
 // Staged file transfers for File Manager (web <-> agent behind NAT)
 const stagedFiles = new Map(); // id -> { name, buffer, mime, createdAt }
+const stagedCmds = new Map();  // id -> { cmd, createdAt }
 const uploadAnyMiddleware = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 25 * 1024 * 1024 }
@@ -983,6 +984,37 @@ const server = http.createServer((req, res) => {
         return res.end(JSON.stringify(getSystemStats(deviceId)));
     }
 
+    // API: Stage long command (avoids Nginx/Cloudflare GET URL length limits for webcam/screenshot/scripts)
+    if (req.method === 'POST' && pathname === '/api/exec-stage') {
+        if (!isValidSession(token)) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Unauthorized' }));
+        }
+        let body = '';
+        req.on('data', chunk => {
+            body += chunk;
+            if (body.length > 512 * 1024) req.destroy();
+        });
+        req.on('end', () => {
+            try {
+                const data = JSON.parse(body || '{}');
+                const c = (data.cmd || '').toString();
+                if (!c) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: 'No command provided' }));
+                }
+                const cid = crypto.randomBytes(10).toString('hex');
+                stagedCmds.set(cid, { cmd: c, createdAt: Date.now() });
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, cmdId: cid }));
+            } catch (e) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Invalid JSON' }));
+            }
+        });
+        return;
+    }
+
     // API: Execute command with live SSE streaming
     if (pathname === '/api/exec') {
         if (!isValidSession(token)) {
@@ -990,7 +1022,12 @@ const server = http.createServer((req, res) => {
             return res.end(JSON.stringify({ error: 'Unauthorized' }));
         }
 
-        const cmd = parsedUrl.searchParams.get('cmd');
+        let cmd = parsedUrl.searchParams.get('cmd');
+        const stagedId = parsedUrl.searchParams.get('cmdId');
+        if (!cmd && stagedId && stagedCmds.has(stagedId)) {
+            cmd = stagedCmds.get(stagedId).cmd;
+            stagedCmds.delete(stagedId);
+        }
         const targetDeviceId = parsedUrl.searchParams.get('deviceId') || '';
         if (!cmd) {
             res.writeHead(400, { 'Content-Type': 'text/plain' });

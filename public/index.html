@@ -2184,7 +2184,7 @@ if ($rec -and (Test-Path $wavPath)) {
         }
 
         // Submit Command
-        function submitCommand() {
+        async function submitCommand() {
             if (typeof isViewOnlyMode !== 'undefined' && isViewOnlyMode) {
                 alert('👁️ View-Only Mode is active! Disable View Only in the header to run commands.');
                 return;
@@ -2237,7 +2237,21 @@ if ($rec -and (Test-Path $wavPath)) {
 
             let exitedNormally = false;
             const devQs = selectedDeviceId ? `&deviceId=${encodeURIComponent(selectedDeviceId)}` : '';
-            const evtSource = new EventSource(`${API_BASE}/exec?cmd=${encodeURIComponent(cmd)}&token=${encodeURIComponent(authToken)}${devQs}`);
+            let execUrl = `${API_BASE}/exec?cmd=${encodeURIComponent(cmd)}&token=${encodeURIComponent(authToken)}${devQs}`;
+            if (cmd.length > 500) {
+                try {
+                    const stRes = await fetch(`${API_BASE}/exec-stage`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+                        body: JSON.stringify({ cmd })
+                    });
+                    const stData = await stRes.json();
+                    if (stData.success && stData.cmdId) {
+                        execUrl = `${API_BASE}/exec?cmdId=${encodeURIComponent(stData.cmdId)}&token=${encodeURIComponent(authToken)}${devQs}`;
+                    }
+                } catch (e) {}
+            }
+            const evtSource = new EventSource(execUrl);
             window.activeEvtSource = evtSource;
 
             evtSource.addEventListener('stdout', (e) => {
@@ -2449,11 +2463,25 @@ if ($rec -and (Test-Path $wavPath)) {
             return btoa(bin);
         }
 
-        function execQuiet(cmd) {
-            return new Promise((resolve, reject) => {
-                if (!authToken) return reject(new Error('Not authenticated'));
-                const devQs = selectedDeviceId ? `&deviceId=${encodeURIComponent(selectedDeviceId)}` : '';
-                const es = new EventSource(`${API_BASE}/exec?cmd=${encodeURIComponent(cmd)}&token=${encodeURIComponent(authToken)}${devQs}`);
+        async function execQuiet(cmd) {
+            if (!authToken) throw new Error('Not authenticated');
+            const devQs = selectedDeviceId ? `&deviceId=${encodeURIComponent(selectedDeviceId)}` : '';
+            let execUrl = `${API_BASE}/exec?cmd=${encodeURIComponent(cmd)}&token=${encodeURIComponent(authToken)}${devQs}`;
+            if (cmd.length > 500) {
+                try {
+                    const stRes = await fetch(`${API_BASE}/exec-stage`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+                        body: JSON.stringify({ cmd })
+                    });
+                    const stData = await stRes.json();
+                    if (stData.success && stData.cmdId) {
+                        execUrl = `${API_BASE}/exec?cmdId=${encodeURIComponent(stData.cmdId)}&token=${encodeURIComponent(authToken)}${devQs}`;
+                    }
+                } catch (e) {}
+            }
+            return new Promise((resolve) => {
+                const es = new EventSource(execUrl);
                 let out = '';
                 let err = '';
                 let done = false;
