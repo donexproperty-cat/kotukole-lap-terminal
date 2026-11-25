@@ -164,6 +164,50 @@ const PROTECT_UPLOADS = (process.env.PROTECT_UPLOADS || '').trim().toLowerCase()
 const TELEGRAM_BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
 const TELEGRAM_CHAT_ID = (process.env.TELEGRAM_CHAT_ID || '').trim();
 const DISCORD_WEBHOOK_URL = (process.env.DISCORD_WEBHOOK_URL || '').trim();
+const TOTP_SECRET = (process.env.TOTP_SECRET || '').trim();
+const AUDIT_LOG_FILE = path.join(os.tmpdir(), 'kterm_audit.log');
+
+function logAudit(action, details, ip = '') {
+    try {
+        const entry = JSON.stringify({
+            time: new Date().toISOString(),
+            action,
+            details,
+            ip
+        }) + '\n';
+        fs.appendFileSync(AUDIT_LOG_FILE, entry, 'utf8');
+    } catch (e) {}
+}
+
+function verifyTOTP(code, base32Secret) {
+    if (!base32Secret) return true;
+    const cleanCode = (code || '').toString().replace(/\s+/g, '');
+    if (!/^\d{6}$/.test(cleanCode)) return false;
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    let bits = '';
+    for (const ch of base32Secret.toUpperCase().replace(/=+$/, '')) {
+        const idx = alphabet.indexOf(ch);
+        if (idx === -1) continue;
+        bits += idx.toString(2).padStart(5, '0');
+    }
+    const bytes = [];
+    for (let i = 0; i + 8 <= bits.length; i += 8) {
+        bytes.push(parseInt(bits.slice(i, i + 8), 2));
+    }
+    const key = Buffer.from(bytes);
+    const nowStep = Math.floor(Date.now() / 1000 / 30);
+    for (let offset = -1; offset <= 1; offset++) {
+        const counter = Buffer.alloc(8);
+        counter.writeUInt32BE(Math.floor((nowStep + offset) / 0x100000000), 0);
+        counter.writeUInt32BE((nowStep + offset) >>> 0, 4);
+        const hmac = crypto.createHmac('sha1', key).update(counter).digest();
+        const pos = hmac[hmac.length - 1] & 0x0f;
+        const bin = ((hmac[pos] & 0x7f) << 24) | ((hmac[pos + 1] & 0xff) << 16) | ((hmac[pos + 2] & 0xff) << 8) | (hmac[pos + 3] & 0xff);
+        const otp = (bin % 1000000).toString().padStart(6, '0');
+        if (otp === cleanCode) return true;
+    }
+    return false;
+}
 
 function isAuthorizedAgent(req, parsedUrl) {
     if (!AGENT_SECRET) return true;
@@ -811,13 +855,16 @@ const server = http.createServer((req, res) => {
             try {
                 const data = JSON.parse(body || '{}');
                 const userPass = (data.password || '').toString();
-                if (verifyPassword(userPass, ACCESS_PASSWORD)) {
+                const totpCode = (data.totpCode || '').toString();
+                if (verifyPassword(userPass, ACCESS_PASSWORD) && verifyTOTP(totpCode, TOTP_SECRET)) {
                     resetLoginRateLimit(clientIp);
                     const token = generateToken();
+                    logAudit('LOGIN_SUCCESS', 'Web console unlocked', clientIp);
                     res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ success: true, token }));
+                    res.end(JSON.stringify({ success: true, token, totpRequired: !!TOTP_SECRET }));
                 } else {
                     recordFailedLogin(clientIp);
+                    logAudit('LOGIN_FAILED', 'Invalid password or 2FA code', clientIp);
                     res.writeHead(401, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ success: false, error: 'වැරදි Password එකක්! කරුණාකර නැවත උත්සාහ කරන්න.' }));
                 }
@@ -832,6 +879,27 @@ const server = http.createServer((req, res) => {
     // Auth Middleware for protected endpoints
     const authHeader = req.headers['authorization'] || '';
     const token = authHeader.replace(/^Bearer\s+/i, '') || parsedUrl.searchParams.get('token');
+
+    // API: Audit Logs
+    if (pathname === '/api/audit') {
+        if (!isValidSession(token)) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Unauthorized' }));
+        }
+        try {
+            if (!fs.existsSync(AUDIT_LOG_FILE)) {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ logs: [] }));
+            }
+            const lines = fs.readFileSync(AUDIT_LOG_FILE, 'utf8').trim().split('\n').filter(Boolean);
+            const logs = lines.slice(-100).reverse().map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ logs }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: e.message }));
+        }
+    }
 
     // API: System Stats
     if (pathname === '/api/stats') {
@@ -857,6 +925,7 @@ const server = http.createServer((req, res) => {
             res.writeHead(400, { 'Content-Type': 'text/plain' });
             return res.end('No command provided');
         }
+        logAudit('EXEC_CMD', cmd.length > 180 ? cmd.slice(0, 180) + '...' : cmd, getClientIp(req));
 
         // Set up SSE for streaming stdout & stderr live
         res.writeHead(200, {

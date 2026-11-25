@@ -1191,6 +1191,15 @@
                 <a href="Install-Startup.ps1" download class="btn-chip" title="Download Windows Auto-Startup Installer" style="text-decoration:none; border-color: rgba(16, 185, 129, 0.4); color: #34d399;">
                     🚀 Auto-Start
                 </a>
+                <button class="btn-chip" onclick="openServicesModal()" title="View & control Windows Services" style="border-color: rgba(14, 165, 233, 0.4); color: #38bdf8;">
+                    🛠️ Services
+                </button>
+                <button class="btn-chip" onclick="openSoftwareModal()" title="View installed applications" style="border-color: rgba(168, 85, 247, 0.4); color: #c084fc;">
+                    📦 Software
+                </button>
+                <button class="btn-chip" onclick="openAuditModal()" title="View security & command audit logs" style="border-color: rgba(148, 163, 184, 0.4); color: #cbd5e1;">
+                    📜 Audit Logs
+                </button>
             </div>
             <div class="actions-group">
                 <button class="btn-chip btn-chip-red" onclick="clearTerminal()" title="Clear terminal screen">
@@ -1268,6 +1277,7 @@
             <h2>K-Term Terminal</h2>
             <p>Access Password එක ඇතුළත් කර Console එක Unlock කරගන්න.</p>
             <input type="password" id="auth-password" class="auth-input" placeholder="Password ඇතුළත් කරන්න" autofocus>
+            <input type="text" id="auth-totp" class="auth-input" placeholder="2FA Code (Optional - if enabled)" maxlength="6" style="margin-top: 8px;">
             <button class="auth-btn" onclick="login()">Unlock Terminal</button>
             <div class="auth-error" id="auth-error"></div>
         </div>
@@ -1327,12 +1337,14 @@
 
         async function login() {
             const pwd = (authPassword.value || '').trim();
+            const totpEl = document.getElementById('auth-totp');
+            const totpCode = totpEl ? (totpEl.value || '').trim() : '';
             if (!pwd) return;
             try {
                 const res = await fetch(`${API_BASE}/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password: pwd })
+                    body: JSON.stringify({ password: pwd, totpCode })
                 });
                 const data = await res.json();
                 if (data.success && data.token) {
@@ -2148,6 +2160,9 @@ if ($rec -and (Test-Path $wavPath)) {
                     <button id="btn-live-screen" class="btn-banner btn-banner-ghost" onclick="toggleLiveScreen()" title="Auto-refresh screenshot every 3s">
                         🔴 Live Screen
                     </button>
+                    <button id="btn-remote-ctrl" class="btn-banner btn-banner-ghost" onclick="toggleRemoteControl()" title="Click on screenshot to click on laptop">
+                        🖱️ Remote Control
+                    </button>
                     <button class="btn-banner btn-banner-green" onclick="captureScreenshot()" title="Retake Screenshot">
                         🔄 Retake
                     </button>
@@ -2652,6 +2667,95 @@ Write-Output ('==KTERM_SCREENSHOT==data:image/jpeg;base64,' + $b64 + '==END_SCRE
             list.splice(idx, 1);
             localStorage.setItem('kterm_snippets', JSON.stringify(list));
             openSnippetsModal();
+        }
+
+        // 9. REMOTE DESKTOP MOUSE & KEYBOARD CONTROL
+        let remoteControlActive = false;
+        function toggleRemoteControl() {
+            remoteControlActive = !remoteControlActive;
+            const btn = document.getElementById('btn-remote-ctrl');
+            const img = document.getElementById('screenshot-modal-img');
+            if (remoteControlActive) {
+                if (btn) { btn.innerText = '🖱️ Control ON'; btn.style.background = '#2563eb'; }
+                if (img) img.style.cursor = 'crosshair';
+            } else {
+                if (btn) { btn.innerText = '🖱️ Remote Control'; btn.style.background = ''; }
+                if (img) img.style.cursor = 'zoom-in';
+            }
+        }
+
+        (function attachRemoteClick() {
+            const img = document.getElementById('screenshot-modal-img');
+            if (!img) return;
+            img.addEventListener('click', async (e) => {
+                if (!remoteControlActive || !isLaptopOnline) return;
+                e.stopPropagation();
+                const rect = img.getBoundingClientRect();
+                const rx = (e.clientX - rect.left) / rect.width;
+                const ry = (e.clientY - rect.top) / rect.height;
+                const ps = `Add-Type -AssemblyName System.Windows.Forms
+$code = '[DllImport("user32.dll")] public static extern void mouse_event(int dwFlags, int dx, int dy, int cButtons, int dwExtraInfo);'
+$m = Add-Type -MemberDefinition $code -Name M -Namespace W -PassThru
+$b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+$x = [int]($b.Width * ${rx.toFixed(4)}); $y = [int]($b.Height * ${ry.toFixed(4)})
+[System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point($x, $y)
+$m::mouse_event(2, 0, 0, 0, 0); $m::mouse_event(4, 0, 0, 0, 0)`;
+                await execPsQuiet(ps);
+                setTimeout(() => { if (!isRunningCommand) runQuickAction('screenshot'); }, 600);
+            }, true);
+        })();
+
+        // 10. WINDOWS SERVICES MANAGER
+        async function openServicesModal() {
+            if (!isLaptopOnline) { alert('Services Manager requires Physical Laptop Agent.'); return; }
+            openFeatureModal('🛠️', 'Windows Services', 'Loading services...', '<div style="color:#94a3b8;">⏳ Fetching Windows services...</div>');
+            const ps = `Get-Service | Select-Object -First 60 Name, DisplayName, @{N="Status";E={$_.Status.ToString()}} | ConvertTo-Json -Compress`;
+            const res = await execPsQuiet(ps);
+            let list = [];
+            try { list = JSON.parse(res.out || '[]'); if (!Array.isArray(list)) list = [list]; } catch (e) {}
+            const rows = list.map(s => {
+                const running = s.Status === 'Running';
+                const safeName = escapeHtml((s.Name || '').replace(/'/g, ''));
+                return `<tr style="border-bottom:1px solid rgba(148,163,184,0.12);">
+                    <td style="padding:6px;color:#e2e8f0;">${escapeHtml(s.DisplayName || s.Name)}<div style="font-size:0.72rem;color:#64748b;">${escapeHtml(s.Name)}</div></td>
+                    <td style="padding:6px;color:${running ? '#10b981' : '#f87171'};">${escapeHtml(s.Status)}</td>
+                    <td style="padding:6px;text-align:right;white-space:nowrap;">
+                        ${running ? `<button class="btn-chip btn-chip-red" style="padding:2px 8px;font-size:0.72rem;" onclick="ctrlService('${safeName}','Stop')">Stop</button>` : `<button class="btn-chip" style="padding:2px 8px;font-size:0.72rem;" onclick="ctrlService('${safeName}','Start')">Start</button>`}
+                    </td>
+                </tr>`;
+            }).join('');
+            document.getElementById('fm-modal-body').innerHTML = `<div style="max-height:58vh;overflow-y:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="text-align:left;color:#94a3b8;border-bottom:1px solid #334155;"><th style="padding:6px;">Service</th><th style="padding:6px;">Status</th><th style="padding:6px;text-align:right;">Action</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+        }
+
+        async function ctrlService(name, action) {
+            await execPsQuiet(`${action}-Service -Name "${name}" -ErrorAction SilentlyContinue`);
+            await openServicesModal();
+        }
+
+        // 11. INSTALLED SOFTWARE INVENTORY
+        async function openSoftwareModal() {
+            if (!isLaptopOnline) { alert('Software Inventory requires Physical Laptop Agent.'); return; }
+            openFeatureModal('📦', 'Installed Software', 'Scanning registry...', '<div style="color:#94a3b8;">⏳ Loading installed applications...</div>');
+            const ps = `Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName } | Select-Object -First 80 DisplayName, DisplayVersion, Publisher | Sort-Object DisplayName | ConvertTo-Json -Compress`;
+            const res = await execPsQuiet(ps);
+            let list = [];
+            try { list = JSON.parse(res.out || '[]'); if (!Array.isArray(list)) list = [list]; } catch (e) {}
+            const rows = list.map(a => `<tr style="border-bottom:1px solid rgba(148,163,184,0.12);"><td style="padding:6px;color:#e2e8f0;">${escapeHtml(a.DisplayName || '')}</td><td style="padding:6px;color:#38bdf8;">${escapeHtml(a.DisplayVersion || '-')}</td><td style="padding:6px;color:#94a3b8;">${escapeHtml(a.Publisher || '-')}</td></tr>`).join('');
+            document.getElementById('fm-modal-body').innerHTML = `<div style="max-height:58vh;overflow-y:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="text-align:left;color:#94a3b8;border-bottom:1px solid #334155;"><th style="padding:6px;">Application</th><th style="padding:6px;">Version</th><th style="padding:6px;">Publisher</th></tr></thead><tbody>${rows || '<tr><td colspan="3">None found</td></tr>'}</tbody></table></div>`;
+        }
+
+        // 12. AUDIT LOGS VIEWER
+        async function openAuditModal() {
+            openFeatureModal('📜', 'Security & Command Audit Logs', 'Last 100 events', '<div style="color:#94a3b8;">⏳ Loading audit logs...</div>');
+            try {
+                const res = await fetch(`${API_BASE}/audit`, { headers: { 'Authorization': `Bearer ${authToken}` } });
+                const data = await res.json();
+                const logs = data.logs || [];
+                const rows = logs.map(l => `<tr style="border-bottom:1px solid rgba(148,163,184,0.12);"><td style="padding:6px;color:#94a3b8;font-size:0.74rem;white-space:nowrap;">${escapeHtml((l.time || '').replace('T',' ').slice(0,19))}</td><td style="padding:6px;color:#38bdf8;font-weight:600;">${escapeHtml(l.action || '')}</td><td style="padding:6px;color:#e2e8f0;font-family:monospace;font-size:0.76rem;">${escapeHtml(l.details || '')}</td><td style="padding:6px;color:#64748b;font-size:0.74rem;">${escapeHtml(l.ip || '')}</td></tr>`).join('');
+                document.getElementById('fm-modal-body').innerHTML = `<div style="max-height:58vh;overflow-y:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="text-align:left;color:#94a3b8;border-bottom:1px solid #334155;"><th style="padding:6px;">Time (UTC)</th><th style="padding:6px;">Action</th><th style="padding:6px;">Details</th><th style="padding:6px;">IP</th></tr></thead><tbody>${rows || '<tr><td colspan="4" style="padding:12px;color:#64748b;">No audit logs yet.</td></tr>'}</tbody></table></div>`;
+            } catch (e) {
+                document.getElementById('fm-modal-body').innerHTML = `<div style="color:#f87171;">Failed to load audit logs.</div>`;
+            }
         }
     </script>
 </body>
