@@ -57,6 +57,38 @@ Write-Host "[*] Processor (CPU)           : $cpuModel"
 if ($gpuName) { Write-Host "[*] Graphics (GPU)            : $gpuName" }
 Write-Host "[*] CPU Cores                 : $cores"
 Write-Host "[*] Operating OS              : $osName"
+
+# Ensure local copy & Windows Logon Auto-Startup (Scheduled Task) unless disabled
+$localAgentPath = Join-Path $configDir "agent.ps1"
+if (-not $env:KTERM_NO_STARTUP) {
+    try {
+        if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
+        $scriptSrc = $MyInvocation.MyCommand.ScriptContents
+        if ($scriptSrc) {
+            Set-Content -Path $localAgentPath -Value $scriptSrc -Encoding UTF8 -Force
+        } elseif ($PSCommandPath -and (Test-Path $PSCommandPath)) {
+            Copy-Item $PSCommandPath $localAgentPath -Force
+        } else {
+            Invoke-WebRequest -Uri "$serverUrl/agent.ps1" -OutFile $localAgentPath -UseBasicParsing -ErrorAction SilentlyContinue
+        }
+
+        $taskName = "KTermLaptopAgent"
+        $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+        if (-not $existingTask -and (Test-Path $localAgentPath)) {
+            $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$localAgentPath`""
+            $trigger = New-ScheduledTaskTrigger -AtLogOn
+            $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+            Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description "K-Term Physical Laptop Agent" -Force | Out-Null
+            Write-Host "[+] Auto-Startup              : ENABLED (Task '$taskName' at Windows Logon)" -ForegroundColor Green
+            Write-AgentLog "Registered Scheduled Task '$taskName' -> $localAgentPath"
+        } elseif ($existingTask) {
+            Write-Host "[+] Auto-Startup              : ALREADY ENABLED (Task '$taskName')" -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "[!] Auto-Startup Setup        : Skipped ($($_.Exception.Message))" -ForegroundColor Yellow
+    }
+}
+
 Write-Host "`n[+] Status: CONNECTED & LISTENING for commands from Server" -ForegroundColor Green
 Write-Host "[+] Log File: $logPath`n" -ForegroundColor DarkGray
 Write-AgentLog "Agent v1.3.0 started -> $serverUrl ($deviceId)"
