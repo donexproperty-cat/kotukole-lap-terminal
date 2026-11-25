@@ -100,6 +100,7 @@ while ($true) {
 
         $bodyObj = @{
             deviceId = $deviceId
+            version = "1.2.0"
             hostname = $hostname
             user = $username
             os = $osName

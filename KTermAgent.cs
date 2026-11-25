@@ -201,6 +201,7 @@ namespace KTerm
                     string deviceId = Environment.MachineName + "@" + Environment.UserName;
                     string pollData = "{"
                         + "\"deviceId\":\"" + EscapeJson(deviceId) + "\","
+                        + "\"version\":\"1.2.0\","
                         + "\"hostname\":\"" + EscapeJson(Environment.MachineName) + "\","
                         + "\"user\":\"" + EscapeJson(Environment.UserName) + "\","
                         + "\"os\":\"" + EscapeJson(Environment.OSVersion.ToString()) + "\","

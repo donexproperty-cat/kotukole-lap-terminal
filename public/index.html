@@ -1200,6 +1200,9 @@
                 <button class="btn-chip" onclick="openAuditModal()" title="View security & command audit logs" style="border-color: rgba(148, 163, 184, 0.4); color: #cbd5e1;">
                     📜 Audit Logs
                 </button>
+                <button class="btn-chip" onclick="openEventLogsModal()" title="View Windows System & Application Event Logs" style="border-color: rgba(245, 158, 11, 0.4); color: #fbbf24;">
+                    🔍 Event Logs
+                </button>
             </div>
             <div class="actions-group">
                 <button class="btn-chip btn-chip-red" onclick="clearTerminal()" title="Clear terminal screen">
@@ -2160,8 +2163,11 @@ if ($rec -and (Test-Path $wavPath)) {
                     <button id="btn-live-screen" class="btn-banner btn-banner-ghost" onclick="toggleLiveScreen()" title="Auto-refresh screenshot every 3s">
                         🔴 Live Screen
                     </button>
-                    <button id="btn-remote-ctrl" class="btn-banner btn-banner-ghost" onclick="toggleRemoteControl()" title="Click on screenshot to click on laptop">
+                    <button id="btn-remote-ctrl" class="btn-banner btn-banner-ghost" onclick="toggleRemoteControl()" title="Click/Right-Click on screenshot to control laptop mouse">
                         🖱️ Remote Control
+                    </button>
+                    <button class="btn-banner btn-banner-ghost" onclick="sendRemoteTextPrompt()" title="Type text or Enter on laptop">
+                        ⌨️ Type Text
                     </button>
                     <button class="btn-banner btn-banner-green" onclick="captureScreenshot()" title="Retake Screenshot">
                         🔄 Retake
@@ -2397,7 +2403,10 @@ $items | ConvertTo-Json -Compress`;
                         ⬆️ Upload File <input type="file" style="display:none;" onchange="uploadToLaptop(this)">
                     </label>
                 </div>
-                <div style="max-height:55vh;overflow-y:auto;">
+                <div id="fm-drop-zone" ondragover="event.preventDefault();this.style.borderColor='#4ade80'" ondragleave="this.style.borderColor='#334155'" ondrop="event.preventDefault();this.style.borderColor='#334155';if(event.dataTransfer.files[0]) uploadFileObject(event.dataTransfer.files[0])" style="border:1px dashed #334155;border-radius:6px;padding:8px;text-align:center;color:#94a3b8;font-size:0.76rem;margin-bottom:10px;">
+                    📥 Drag & Drop any file here to upload to <strong>${escapeHtml(currentFmPath)}</strong>
+                </div>
+                <div style="max-height:50vh;overflow-y:auto;">
                     <table style="width:100%;border-collapse:collapse;">
                         <thead><tr style="text-align:left;color:#94a3b8;border-bottom:1px solid #334155;"><th style="padding:6px;">Name</th><th style="padding:6px;">Size</th><th style="padding:6px;text-align:right;">Actions</th></tr></thead>
                         <tbody>${rows || '<tr><td colspan="3" style="padding:16px;text-align:center;color:#64748b;">Empty folder</td></tr>'}</tbody>
@@ -2407,7 +2416,10 @@ $items | ConvertTo-Json -Compress`;
 
         async function uploadToLaptop(input) {
             if (!input.files || !input.files[0]) return;
-            const file = input.files[0];
+            await uploadFileObject(input.files[0]);
+        }
+
+        async function uploadFileObject(file) {
             const form = new FormData();
             form.append('file', file);
             const stageRes = await fetch(`${API_BASE}/files/stage?token=${encodeURIComponent(authToken)}`, {
@@ -2703,7 +2715,53 @@ $m::mouse_event(2, 0, 0, 0, 0); $m::mouse_event(4, 0, 0, 0, 0)`;
                 await execPsQuiet(ps);
                 setTimeout(() => { if (!isRunningCommand) runQuickAction('screenshot'); }, 600);
             }, true);
+            img.addEventListener('contextmenu', async (e) => {
+                if (!remoteControlActive || !isLaptopOnline) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const rect = img.getBoundingClientRect();
+                const rx = (e.clientX - rect.left) / rect.width;
+                const ry = (e.clientY - rect.top) / rect.height;
+                const ps = `Add-Type -AssemblyName System.Windows.Forms
+$code = '[DllImport("user32.dll")] public static extern void mouse_event(int dwFlags, int dx, int dy, int cButtons, int dwExtraInfo);'
+$m = Add-Type -MemberDefinition $code -Name M -Namespace W -PassThru
+$b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+$x = [int]($b.Width * ${rx.toFixed(4)}); $y = [int]($b.Height * ${ry.toFixed(4)})
+[System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point($x, $y)
+$m::mouse_event(8, 0, 0, 0, 0); $m::mouse_event(16, 0, 0, 0, 0)`;
+                await execPsQuiet(ps);
+                setTimeout(() => { if (!isRunningCommand) runQuickAction('screenshot'); }, 600);
+            }, true);
         })();
+
+        async function sendRemoteTextPrompt() {
+            if (!isLaptopOnline) { alert('Remote Keyboard requires Physical Laptop Agent.'); return; }
+            const txt = prompt('Text to type on laptop (append {ENTER} to press Enter):', '');
+            if (!txt) return;
+            const b64 = btoa(unescape(encodeURIComponent(txt)));
+            const ps = `Add-Type -AssemblyName System.Windows.Forms
+$t = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${b64}"))
+[System.Windows.Forms.SendKeys]::SendWait($t)`;
+            await execPsQuiet(ps);
+            setTimeout(() => { if (!isRunningCommand) runQuickAction('screenshot'); }, 600);
+        }
+
+        // 13. WINDOWS EVENT LOG VIEWER
+        async function openEventLogsModal(logName = 'System') {
+            if (!isLaptopOnline) { alert('Event Logs require Physical Laptop Agent.'); return; }
+            openFeatureModal('🔍', `Windows Event Logs (${logName})`, 'Recent Errors & Warnings', '<div style="color:#94a3b8;">⏳ Querying Windows Event Log...</div>');
+            const ps = `Get-WinEvent -FilterHashtable @{LogName='${logName}'; Level=1,2,3} -MaxEvents 30 -ErrorAction SilentlyContinue | Select-Object TimeCreated, LevelDisplayName, ProviderName, @{N="Msg";E={($_.Message -split "\`n")[0]}} | ConvertTo-Json -Compress`;
+            const res = await execPsQuiet(ps);
+            let list = [];
+            try { list = JSON.parse(res.out || '[]'); if (!Array.isArray(list)) list = [list]; } catch (e) {}
+            const rows = list.map(ev => `<tr style="border-bottom:1px solid rgba(148,163,184,0.12);"><td style="padding:6px;color:#fbbf24;font-size:0.74rem;">${escapeHtml(ev.LevelDisplayName || '')}</td><td style="padding:6px;color:#38bdf8;font-size:0.76rem;">${escapeHtml(ev.ProviderName || '')}</td><td style="padding:6px;color:#e2e8f0;font-size:0.76rem;">${escapeHtml(ev.Msg || '')}</td></tr>`).join('');
+            document.getElementById('fm-modal-body').innerHTML = `
+                <div style="display:flex;gap:8px;margin-bottom:10px;">
+                    <button class="btn-chip" onclick="openEventLogsModal('System')">System</button>
+                    <button class="btn-chip" onclick="openEventLogsModal('Application')">Application</button>
+                </div>
+                <div style="max-height:54vh;overflow-y:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="text-align:left;color:#94a3b8;border-bottom:1px solid #334155;"><th style="padding:6px;">Level</th><th style="padding:6px;">Source</th><th style="padding:6px;">Message</th></tr></thead><tbody>${rows || '<tr><td colspan="3" style="padding:12px;color:#64748b;">No recent errors/warnings.</td></tr>'}</tbody></table></div>`;
+        }
 
         // 10. WINDOWS SERVICES MANAGER
         async function openServicesModal() {

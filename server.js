@@ -598,6 +598,7 @@ const server = http.createServer((req, res) => {
                     user,
                     os: data.os || 'Windows',
                     cores: data.cores || '1',
+                    version: data.version || '1.1.0',
                     cpuModel: data.cpuModel || '',
                     ramTotal: data.ramTotal || '',
                     ramUsed: data.ramUsed || '',
@@ -609,8 +610,17 @@ const server = http.createServer((req, res) => {
                     batteryStatus: data.batteryStatus || '',
                     cpuTemp: data.cpuTemp || '',
                     lastSeen: Date.now(),
-                    _onlineAlerted: true
+                    _onlineAlerted: true,
+                    _lastResourceAlert: prev ? (prev._lastResourceAlert || 0) : 0
                 };
+
+                // Resource Threshold Alerting (throttled to once per 15 mins per device)
+                const ramNum = parseFloat(agentInfo.ramPercent);
+                const diskNum = parseFloat((agentInfo.diskPercent || '').replace('%', ''));
+                if ((ramNum >= 92 || diskNum >= 92) && (Date.now() - agentInfo._lastResourceAlert > 15 * 60 * 1000)) {
+                    agentInfo._lastResourceAlert = Date.now();
+                    sendAlert('⚠️ K-Term Resource Alert', `Device: ${hostname} (${user})\nRAM: ${agentInfo.ramPercent}% | Disk: ${agentInfo.diskPercent}`);
+                }
 
                 connectedAgents.set(deviceId, agentInfo);
                 connectedAgent = agentInfo;
