@@ -272,6 +272,9 @@ setInterval(() => {
     for (const [id, item] of stagedFiles.entries()) {
         if (item.createdAt < cutoff) stagedFiles.delete(id);
     }
+    for (const [id, item] of stagedCmds.entries()) {
+        if (item.createdAt < cutoff) stagedCmds.delete(id);
+    }
 }, 60 * 1000);
 
 // Active auth sessions (persisted to disk across restarts)
@@ -1090,7 +1093,7 @@ const server = http.createServer((req, res) => {
         // FALLBACK: NO LAPTOP AGENT CONNECTED -> EXECUTE ON VPS
         sendEvent('stdout', `[Notice: Laptop Agent not running. Executing on Cloud VPS (${os.hostname()})]\n[Tip: Run K-Term Agent on your laptop to execute directly on your physical laptop!]\n\n`);
 
-        const currentDir = process.env.HOME || '/home/dinujaya';
+        const currentDir = process.env.HOME || os.homedir();
         const child = spawn(cmd, {
             shell: true,
             cwd: currentDir,

@@ -1975,17 +1975,7 @@ if ($rec -and (Test-Path $wavPath)) {
 } else {
     Write-Output "[Notice: Microphone recording failed. Check microphone permissions.]"
 }`;
-            const bytes = new TextEncoder().encode(ps);
-            let utf16 = '';
-            const arr = new Uint8Array(bytes.length * 2);
-            for (let i = 0; i < ps.length; i++) {
-                const code = ps.charCodeAt(i);
-                arr[i * 2] = code & 0xff;
-                arr[i * 2 + 1] = (code >> 8) & 0xff;
-            }
-            let bin = '';
-            for (let i = 0; i < arr.length; i++) bin += String.fromCharCode(arr[i]);
-            cmdInput.value = 'powershell -NoProfile -ExecutionPolicy Bypass -enc ' + btoa(bin);
+            cmdInput.value = 'powershell -NoProfile -ExecutionPolicy Bypass -enc ' + encodePsBase64(ps);
             submitCommand();
         }
 
